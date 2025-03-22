@@ -1,0 +1,92 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.container {
+    background-color: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    max-width: 1200px;
+    width: 95%;
+}
+
+.controls {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+button {
+    padding: 10px 20px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #45a049;
+}
+
+#map {
+    width: 100%;
+    height: 600px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.info {
+    color: #666;
+    font-size: 14px;
+}
+
+#status {
+    margin-top: 8px;
+    font-weight: bold;
+}
+
+/* SVG Styles */
+.state {
+    fill: #e0e0e0;
+    stroke: #fff;
+    stroke-width: 1;
+    transition: fill 0.3s;
+}
+
+.state:hover {
+    fill: #d0d0d0;
+}
+
+.point {
+    fill: #ff4444;
+    r: 5;
+}
+
+.path {
+    stroke: #4444ff;
+    stroke-width: 3;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.visited {
+    fill: rgba(100, 149, 237, 0.3);
+}

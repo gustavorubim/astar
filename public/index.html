@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A* Pathfinding Visualization</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://unpkg.com/topojson-client@3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="controls">
+            <button id="generateMap">Generate New Map</button>
+            <div class="info">
+                <p>Click two points on the map to find the shortest path</p>
+                <p id="status"></p>
+            </div>
+        </div>
+        <div id="map"></div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
