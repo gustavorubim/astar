@@ -246,17 +246,43 @@ class PathfindingVisualizer {
 
     handleMapClick(e) {
         if (!this.roadNetwork.ready) {
-            document.getElementById('status').textContent = 'Generate a location first';
+            document.getElementById('status').textContent = 'Please generate a location first';
             return;
         }
 
-        const node = this.roadNetwork.findNearestNode(e.latlng.lat, e.latlng.lng);
-        if (!node) {
-            document.getElementById('status').textContent = 'No road found near click';
-            return;
-        }
+        const clickLocation = e.latlng;
+        this.log('Map clicked:', clickLocation);
 
         try {
+            // Show click location temporarily
+            const clickMarker = L.circle([clickLocation.lat, clickLocation.lng], {
+                radius: 2,
+                color: '#fff',
+                fillColor: '#fff',
+                fillOpacity: 1,
+                weight: 2
+            }).addTo(this.map);
+            
+            setTimeout(() => clickMarker.remove(), 1000);
+
+            // Find nearest node
+            const node = this.roadNetwork.findNearestNode(clickLocation.lat, clickLocation.lng);
+            
+            if (!node) {
+                document.getElementById('status').textContent = 'No road found within 100m of click. Try clicking closer to a road.';
+                return;
+            }
+
+            // Show line from click to nearest node
+            const snapLine = L.polyline([[clickLocation.lat, clickLocation.lng], [node.lat, node.lng]], {
+                color: '#ffffff',
+                weight: 1,
+                dashArray: '4',
+                opacity: 0.6
+            }).addTo(this.map);
+            
+            setTimeout(() => snapLine.remove(), 1000);
+
             // Create marker
             const icon = L.divIcon({
                 className: this.selectMode === 'start' ? 'start-marker' : 'end-marker',
@@ -265,6 +291,7 @@ class PathfindingVisualizer {
                 iconAnchor: [12, 12]
             });
 
+            // Update markers
             if (this.selectMode === 'start') {
                 if (this.startMarker) this.startMarker.remove();
                 this.startMarker = L.marker([node.lat, node.lng], { icon }).addTo(this.map);
@@ -275,17 +302,18 @@ class PathfindingVisualizer {
                 document.getElementById('status').textContent = 'End point set';
             }
 
+            // Update control states
             const hasStartAndEnd = this.startMarker && this.endMarker;
             document.getElementById('startSearch').disabled = !hasStartAndEnd;
             document.getElementById('clearPoints').disabled = !(this.startMarker || this.endMarker);
-
+            
             if (hasStartAndEnd) {
-                document.getElementById('status').textContent = 'Ready to start pathfinding';
+                document.getElementById('status').textContent = 'Ready to start pathfinding! Click Find Path to begin.';
             }
 
         } catch (error) {
             this.log('Error in handleMapClick:', error);
-            document.getElementById('status').textContent = 'Error setting point';
+            document.getElementById('status').textContent = 'Error setting point: ' + error.message;
         }
     }
 
