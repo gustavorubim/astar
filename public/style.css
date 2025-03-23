@@ -20,8 +20,9 @@ body {
     max-width: 1200px;
     margin-bottom: 20px;
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
+    gap: 20px;
     background-color: #2a2a2a;
     padding: 15px;
     border-radius: 8px;
@@ -39,76 +40,53 @@ button {
     transition: background-color 0.3s;
 }
 
-button:hover {
+button:hover:not(:disabled) {
     background-color: #45a049;
 }
 
-.map-info {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    align-items: center;
+button:disabled {
+    background-color: #666;
+    cursor: not-allowed;
 }
 
-#coordinates, #boxSize {
+#status {
     font-size: 14px;
     color: #ddd;
-    background-color: #333;
-    padding: 5px 10px;
-    border-radius: 4px;
-}
-
-.path-controls {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-label {
-    font-size: 14px;
-    color: #ddd;
-}
-
-select {
-    padding: 5px;
-    border-radius: 4px;
-    background-color: #333;
-    color: #fff;
-    border: 1px solid #444;
 }
 
 #map-container {
     width: 100%;
     max-width: 1200px;
-    height: 800px;
+    height: 700px;
     background-color: #2a2a2a;
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-#status {
-    margin-top: 20px;
-    padding: 10px 20px;
-    background-color: #2a2a2a;
-    border-radius: 4px;
-    font-size: 14px;
-    color: #ddd;
-    max-width: 1200px;
-    width: 100%;
-    text-align: center;
+/* Map Customization */
+.leaflet-container {
+    background-color: #2a2a2a !important;
+}
+
+.leaflet-tile {
+    filter: brightness(0.8) contrast(1.2);
+}
+
+.leaflet-control-attribution {
+    background-color: rgba(42, 42, 42, 0.8) !important;
+    color: #ddd !important;
+}
+
+.leaflet-control-attribution a {
+    color: #4CAF50 !important;
 }
 
 /* Responsive Design */
 @media (max-width: 768px) {
     #controls {
         flex-direction: column;
-        gap: 15px;
-    }
-
-    .map-info, .path-controls {
-        width: 100%;
-        justify-content: center;
+        text-align: center;
     }
 
     #map-container {
@@ -118,27 +96,4 @@ select {
     body {
         padding: 10px;
     }
-}
-
-/* Map Customization */
-.leaflet-container {
-    background-color: #2a2a2a;
-}
-
-.leaflet-tile {
-    filter: brightness(0.8) contrast(1.2);
-}
-
-/* Route Styles */
-.route-path {
-    stroke: #4CAF50;
-    stroke-width: 4;
-    stroke-opacity: 0.8;
-}
-
-.bbox-overlay {
-    stroke: #f44336;
-    stroke-width: 2;
-    stroke-dasharray: 5, 5;
-    fill: none;
 }

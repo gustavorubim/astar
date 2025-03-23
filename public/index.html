@@ -3,34 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>US Map Pathfinding</title>
+    <title>US Map Display</title>
     <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin="anonymous" />
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="controls">
-        <button id="randomLocation">Random US Location</button>
-        <div class="map-info">
-            <span id="coordinates">Click button to generate location</span>
-            <span id="boxSize">10mi x 20mi area</span>
-        </div>
-        <div class="path-controls">
-            <label>Path Type:</label>
-            <select id="routeType">
-                <option value="driving">Driving</option>
-                <option value="walking">Walking</option>
-                <option value="cycling">Cycling</option>
-            </select>
-        </div>
+        <button id="randomLocation" disabled>Random US Location</button>
+        <div id="status">Initializing map...</div>
     </div>
     <div id="map-container"></div>
-    <div id="status">Ready to generate location</div>
     
-    <!-- Scripts -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/@turf/turf@7.0.0/turf.min.js"></script>
-    <script src="https://unpkg.com/osrm-client@0.8.3/dist/osrm-client.js"></script>
-    <script type="module" src="app.js"></script>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin="anonymous"></script>
+    <script src="app.js"></script>
 </body>
 </html>

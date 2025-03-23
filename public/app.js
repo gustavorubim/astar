@@ -1,10 +1,5 @@
-class MapPathfinder {
+class USMapDisplay {
     constructor() {
-        this.map = null;
-        this.routeLayer = null;
-        this.bboxLayer = null;
-        this.osrmClient = null;
-        
         // US boundary box for random location generation
         this.usBounds = {
             north: 49.384358,  // Northernmost point
@@ -13,140 +8,164 @@ class MapPathfinder {
             west: -125.000000  // Westernmost point
         };
 
+        this.map = null;
+        this.debug = true;
+        this.currentBox = null;
+        this.currentMarker = null;
+
+        // Initialize the map
         this.initialize();
     }
 
-    initialize() {
-        // Initialize map
-        this.map = L.map('map-container', {
-            center: [39.8283, -98.5795], // Geographic center of USA
-            zoom: 4
-        });
-
-        // Add OpenStreetMap tiles
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(this.map);
-
-        // Initialize layers for route and bounding box
-        this.routeLayer = L.layerGroup().addTo(this.map);
-        this.bboxLayer = L.layerGroup().addTo(this.map);
-
-        this.setupEventListeners();
-    }
-
-    setupEventListeners() {
-        const randomButton = document.getElementById('randomLocation');
-        randomButton.addEventListener('click', () => this.generateRandomLocation());
-
-        const routeSelect = document.getElementById('routeType');
-        routeSelect.addEventListener('change', () => {
-            if (this.currentLocation) {
-                this.updateRouteDisplay();
-            }
-        });
-    }
-
-    generateRandomLocation() {
-        // Generate random coordinates within US bounds
-        const lat = Math.random() * (this.usBounds.north - this.usBounds.south) + this.usBounds.south;
-        const lng = Math.random() * (this.usBounds.east - this.usBounds.west) + this.usBounds.west;
-        
-        this.currentLocation = [lat, lng];
-        this.updateMapView();
-    }
-
-    updateMapView() {
-        // Clear previous layers
-        this.routeLayer.clearLayers();
-        this.bboxLayer.clearLayers();
-
-        // Create 10x20 mile bounding box
-        const bbox = this.createBoundingBox(this.currentLocation[0], this.currentLocation[1], 10, 20);
-        
-        // Draw bounding box
-        const bboxPolygon = L.polygon([
-            [bbox.north, bbox.west],
-            [bbox.north, bbox.east],
-            [bbox.south, bbox.east],
-            [bbox.south, bbox.west]
-        ], {
-            color: '#f44336',
-            weight: 2,
-            fillOpacity: 0,
-            dashArray: '5, 5'
-        }).addTo(this.bboxLayer);
-
-        // Update map view
-        this.map.fitBounds(bboxPolygon.getBounds(), {
-            padding: [50, 50]
-        });
-
-        // Update coordinate display
-        document.getElementById('coordinates').textContent = 
-            `${this.currentLocation[0].toFixed(4)}, ${this.currentLocation[1].toFixed(4)}`;
-        
-        // Fetch and display routes
-        this.fetchRoutes(bbox);
-    }
-
-    createBoundingBox(lat, lng, widthMiles, heightMiles) {
-        // Convert miles to kilometers for turf.js
-        const widthKm = widthMiles * 1.60934;
-        const heightKm = heightMiles * 1.60934;
-
-        // Create bounding box using turf.js
-        const point = turf.point([lng, lat]);
-        const boxPolygon = turf.bbox(turf.buffer(point, Math.max(widthKm, heightKm) / 2, {
-            units: 'kilometers'
-        }));
-
-        return {
-            west: boxPolygon[0],
-            south: boxPolygon[1],
-            east: boxPolygon[2],
-            north: boxPolygon[3]
-        };
-    }
-
-    async fetchRoutes(bbox) {
-        try {
-            document.getElementById('status').textContent = 'Fetching route data...';
-
-            const routeType = document.getElementById('routeType').value;
-            const url = `https://router.project-osrm.org/route/v1/${routeType}/` +
-                       `${this.currentLocation[1]},${this.currentLocation[0]};` +
-                       `${bbox.east},${bbox.north}?overview=full&geometries=geojson`;
-
-            const response = await fetch(url);
-            const data = await response.json();
-
-            if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-                this.displayRoute(data.routes[0].geometry);
-                document.getElementById('status').textContent = 'Route displayed';
-            } else {
-                document.getElementById('status').textContent = 'No route found';
-            }
-        } catch (error) {
-            console.error('Route fetch error:', error);
-            document.getElementById('status').textContent = 'Error fetching route';
+    log(message, data = null) {
+        if (this.debug) {
+            console.log(`[USMapDisplay] ${message}`, data || '');
         }
     }
 
-    displayRoute(geometry) {
-        this.routeLayer.clearLayers();
-        
-        L.geoJSON(geometry, {
-            style: {
-                color: '#4CAF50',
-                weight: 4,
-                opacity: 0.8
+    initialize() {
+        try {
+            this.log('Initializing map...');
+            
+            // Create the map instance centered on US
+            this.map = L.map('map-container', {
+                center: [39.8283, -98.5795],
+                zoom: 4,
+                minZoom: 3,
+                maxZoom: 18
+            });
+
+            // Add OpenStreetMap tile layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18
+            }).addTo(this.map);
+
+            // Set up event listeners
+            this.setupEventListeners();
+
+            // Enable button once map is ready
+            this.map.whenReady(() => {
+                this.log('Map initialization complete');
+                const button = document.getElementById('randomLocation');
+                const status = document.getElementById('status');
+                
+                if (button && status) {
+                    button.disabled = false;
+                    status.textContent = 'Map ready - Click button to generate location';
+                }
+            });
+
+            // Handle map load error
+            this.map.on('error', (error) => {
+                this.log('Map error:', error);
+                document.getElementById('status').textContent = 'Error loading map';
+            });
+
+        } catch (error) {
+            this.log('Error in initialization:', error);
+            const status = document.getElementById('status');
+            if (status) {
+                status.textContent = 'Failed to initialize map';
             }
-        }).addTo(this.routeLayer);
+        }
+    }
+
+    setupEventListeners() {
+        const button = document.getElementById('randomLocation');
+        if (button) {
+            button.addEventListener('click', () => this.generateRandomLocation());
+        }
+    }
+
+    generateRandomLocation() {
+        try {
+            this.log('Generating random location...');
+            
+            // Generate random coordinates within US bounds
+            const lat = Math.random() * (this.usBounds.north - this.usBounds.south) + this.usBounds.south;
+            const lng = Math.random() * (this.usBounds.east - this.usBounds.west) + this.usBounds.west;
+            
+            this.log('Random location generated:', [lat, lng]);
+            
+            // Clear previous markers and boxes
+            if (this.currentMarker) {
+                this.currentMarker.remove();
+            }
+            if (this.currentBox) {
+                this.currentBox.remove();
+            }
+
+            // Create marker at random location
+            this.currentMarker = L.marker([lat, lng]).addTo(this.map);
+
+            // Create and display the bounding box
+            this.createBoundingBox(lat, lng);
+            
+            // Update status
+            document.getElementById('status').textContent =
+                `Location selected: ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°W`;
+
+        } catch (error) {
+            this.log('Error generating location:', error);
+            document.getElementById('status').textContent = 'Error generating location';
+        }
+    }
+
+    createBoundingBox(lat, lng) {
+        try {
+            // Constants for conversion
+            const MILES_TO_KM = 1.60934;
+            const KM_PER_DEGREE_LAT = 111.32; // Approximate km per degree of latitude
+            const KM_PER_DEGREE_LNG = 111.32 * Math.cos(lat * (Math.PI / 180)); // Adjust for latitude
+
+            // Convert 10x20 miles to kilometers
+            const widthKm = 10 * MILES_TO_KM;
+            const heightKm = 20 * MILES_TO_KM;
+
+            // Calculate degree offsets
+            const latOffset = heightKm / (2 * KM_PER_DEGREE_LAT);
+            const lngOffset = widthKm / (2 * KM_PER_DEGREE_LNG);
+
+            // Create bounding box coordinates
+            const bounds = [
+                [lat + latOffset, lng - lngOffset], // Northwest
+                [lat + latOffset, lng + lngOffset], // Northeast
+                [lat - latOffset, lng + lngOffset], // Southeast
+                [lat - latOffset, lng - lngOffset], // Southwest
+                [lat + latOffset, lng - lngOffset]  // Close the polygon
+            ];
+
+            // Create and style the box
+            this.currentBox = L.polygon(bounds, {
+                color: '#f44336',
+                weight: 2,
+                fillColor: '#f44336',
+                fillOpacity: 0.1,
+                dashArray: '5, 5'
+            }).addTo(this.map);
+
+            // Fit map to the box with some padding
+            this.map.fitBounds(this.currentBox.getBounds(), {
+                padding: [50, 50],
+                maxZoom: 13 // Limit zoom level for context
+            });
+
+            this.log('Bounding box created');
+
+        } catch (error) {
+            this.log('Error creating bounding box:', error);
+            document.getElementById('status').textContent = 'Error creating bounding box';
+        }
     }
 }
 
 // Initialize the application when the page loads
 window.addEventListener('load', () => {
-    new MapPathfinder();
+    try {
+        new USMapDisplay();
+    } catch (error) {
+        console.error('Failed to start application:', error);
+        document.getElementById('status').textContent = 'Failed to start application';
+    }
 });

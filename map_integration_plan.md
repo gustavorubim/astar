@@ -1,89 +1,74 @@
-# Real-World Pathfinding Implementation Plan
+# US Map Integration Plan
 
-## Architecture Overview
-```mermaid
-graph TD
-    A[User Click] --> B[Random US Location]
-    B --> C[10x20 Mile BBox]
-    C --> D[OSRM API Request]
-    D --> E[Road Network Graph]
-    E --> F[A* Algorithm]
-    F --> G[Path Visualization]
-    G --> H[Leaflet Map Display]
-```
+This document outlines the incremental approach to implementing the US Map feature with random location selection.
 
 ## Implementation Phases
 
-### 1. Map Integration & Random Location
 ```mermaid
-sequenceDiagram
-    User->>UI: Click "Random Map" Button
-    UI->>GeoServices: Request Random BBox
-    GeoServices->>OSRM: get road network
-    OSRM-->>GeoServices: GeoJSON response
-    GeoServices->>GraphBuilder: Convert to nodes/edges
-    GraphBuilder->>UI: Update visualization
+flowchart TD
+    A[Phase 1: Basic Map Display] --> B[Phase 2: Random Location]
+    B --> C[Phase 3: Bounding Box]
+    C --> D[Phase 4: Routing]
+    
+    A --> A1[Initialize Leaflet]
+    A --> A2[Style Container]
+    A --> A3[Verify Display]
+    
+    B --> B1[Add US Boundaries]
+    B --> B2[Generate Random Point]
+    B --> B3[Display Marker]
+    
+    C --> C1[Calculate Box Dimensions]
+    C --> C2[Draw Rectangle]
+    C --> C3[Center View]
+    
+    D --> D1[Add Route Endpoints]
+    D --> D2[Fetch Route Data]
+    D --> D3[Display Route Line]
 ```
 
-### 2. Core System Modifications
-**Existing Components to Refactor:**
-- GridSystem → RoadNetworkSystem
-- Cell → RoadNode/RoadSegment
-- AStar → GeospatialAStar
+## Phase 1: Minimal Map Display
 
-**New Dependencies:**
-```json
-{
-  "dependencies": {
-    "leaflet": "^1.9.4",
-    "turf": "^7.0.0",
-    "osrm-client": "^0.8.3"
-  }
-}
-```
+**Goal**: Get a basic Leaflet map displaying correctly
 
-### 3. API Integration Plan
-| Service | Endpoint | Rate Limit | Data Format |
-|---------|----------|------------|-------------|
-| OSRM | /route/v1/driving/{coordinates} | 5000/day | GeoJSON |
-| Nominatim | /reverse?format=json | 1000/hour | JSON |
+1. Simplify HTML to focus only on map display
+2. Create minimal JavaScript for map initialization
+3. Ensure CSS properly sizes the container
+4. Add visual confirmation that map loaded
 
-### 4. Road Network Graph Structure
-```javascript
-class RoadNetwork {
-  constructor() {
-    this.nodes = new Map(); // key: node_id, value: {lat, lon}
-    this.edges = new Map(); // key: edge_id, value: {source, target, weight}
-  }
-  
-  addNodeFromOSRM(osrmResponse) {
-    // Parse OSRM nodes
-  }
-}
-```
+## Phase 2: Random Location Generation
 
-### 5. Modified A* Algorithm
-```javascript
-class GeospatialAStar {
-  heuristic(nodeA, nodeB) {
-    return turf.distance(
-      turf.point([nodeA.lon, nodeA.lat]),
-      turf.point([nodeB.lon, nodeB.lat])
-    );
-  }
-}
-```
+**Goal**: Add button that generates and displays a random US location
 
-## Risk Mitigation Strategies
-1. Local OSRM fallback server setup
-2. Web Worker pool for pathfinding
-3. Quad-tree spatial indexing for road nodes
-4. Progressive path rendering
+1. Define US boundary box
+2. Implement random coordinate generation
+3. Add marker to show selected location
+4. Update status text with coordinates
 
-## Estimated Timeline
-| Phase | Duration | Milestone |
-|-------|----------|-----------|
-| Research | 3 days | API validation |
-| Core Refactor | 5 days | Working geospatial A* |
-| UI Integration | 4 days | Map visualization |
-| Testing | 3 days | Cross-browser validation |
+## Phase 3: Add Bounding Box
+
+**Goal**: Display a rectangular 10mi × 20mi area
+
+1. Implement proper geographic calculation for miles to lat/lng
+2. Draw rectangular box centered on random point
+3. Zoom map to show the box appropriately
+4. Add visual styling for the box
+
+## Phase 4: Add Routing (if needed)
+
+**Goal**: Display real roads within the box
+
+1. Fetch map tiles with road data
+2. Implement simple endpoint selection
+3. Add optional route calculation
+4. Style the route display
+
+## Testing Process
+
+For each phase:
+1. Start with a clean implementation
+2. Verify it works before adding complexity
+3. Add clear debugging outputs
+4. Make the code maintainable and well-documented
+
+This approach will help isolate problems quickly and ensure each component works before adding complexity.
