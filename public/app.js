@@ -1,8 +1,25 @@
-import { AStarPathfinder } from './pathfinding.js';
-
 // Grid settings
 const GRID_ROWS = 50;
 const GRID_COLS = 100;
+
+class PriorityQueue {
+    constructor() {
+        this.values = [];
+    }
+
+    enqueue(element, priority) {
+        this.values.push({ element, priority });
+        this.sort();
+    }
+
+    dequeue() {
+        return this.values.shift();
+    }
+
+    sort() {
+        this.values.sort((a, b) => a.priority - b.priority);
+    }
+}
 
 class AStarNode {
     constructor(lat, lng, row, col) {
@@ -19,8 +36,154 @@ class AStarNode {
     }
 }
 
+class AStarPathfinder {
+    constructor(grid, startPos, endPos, visualCallback) {
+        this.grid = grid;
+        this.startPos = startPos;
+        this.endPos = endPos;
+        this.visualCallback = visualCallback;
+        this.openSet = new PriorityQueue();
+        this.closedSet = new Set();
+        this.paused = false;
+        this.speed = 5;
+    }
+
+    async findPath() {
+        console.log('Starting pathfinding...', {
+            start: this.startPos,
+            end: this.endPos
+        });
+
+        const startNode = this.grid[this.startPos.row][this.startPos.col];
+        const endNode = this.grid[this.endPos.row][this.endPos.col];
+
+        startNode.g = 0;
+        startNode.h = this.heuristic(startNode, endNode);
+        startNode.f = startNode.h;
+
+        this.openSet.enqueue(startNode, startNode.f);
+        let nodesExplored = 0;
+
+        while (this.openSet.values.length > 0) {
+            if (this.paused) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                continue;
+            }
+
+            const current = this.openSet.dequeue().element;
+            nodesExplored++;
+
+            if (current === endNode) {
+                console.log('Path found!', { nodesExplored });
+                return {
+                    path: this.reconstructPath(endNode),
+                    nodesExplored
+                };
+            }
+
+            this.closedSet.add(current);
+
+            const neighbors = this.getNeighbors(current);
+            for (const neighbor of neighbors) {
+                if (this.closedSet.has(neighbor) || neighbor.isWall) {
+                    continue;
+                }
+
+                const tentativeG = current.g + this.distance(current, neighbor);
+
+                if (tentativeG < neighbor.g) {
+                    neighbor.parent = current;
+                    neighbor.g = tentativeG;
+                    neighbor.h = this.heuristic(neighbor, endNode);
+                    neighbor.f = neighbor.g + neighbor.h;
+
+                    if (!this.openSet.values.some(v => v.element === neighbor)) {
+                        this.openSet.enqueue(neighbor, neighbor.f);
+                    }
+                }
+            }
+
+            if (this.visualCallback) {
+                this.visualCallback({
+                    current,
+                    openSet: this.openSet.values.map(v => v.element),
+                    closedSet: Array.from(this.closedSet),
+                    nodesExplored
+                });
+                await new Promise(resolve => 
+                    setTimeout(resolve, Math.max(1, 11 - this.speed) * 50)
+                );
+            }
+        }
+
+        console.log('No path found', { nodesExplored });
+        return null;
+    }
+
+    getNeighbors(node) {
+        const neighbors = [];
+        const directions = [
+            [-1, 0], [1, 0], [0, -1], [0, 1],  // Cardinals
+            [-1, -1], [-1, 1], [1, -1], [1, 1]  // Diagonals
+        ];
+
+        for (const [dx, dy] of directions) {
+            const newRow = node.row + dx;
+            const newCol = node.col + dy;
+
+            if (newRow >= 0 && newRow < GRID_ROWS &&
+                newCol >= 0 && newCol < GRID_COLS) {
+                neighbors.push(this.grid[newRow][newCol]);
+            }
+        }
+
+        return neighbors;
+    }
+
+    heuristic(node, goal) {
+        return this.distance(node, goal);
+    }
+
+    distance(nodeA, nodeB) {
+        // Using haversine formula for geographic distance
+        const R = 3959; // Earth's radius in miles
+        const lat1 = nodeA.lat * Math.PI / 180;
+        const lat2 = nodeB.lat * Math.PI / 180;
+        const dLat = (nodeB.lat - nodeA.lat) * Math.PI / 180;
+        const dLon = (nodeB.lng - nodeA.lng) * Math.PI / 180;
+
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                 Math.cos(lat1) * Math.cos(lat2) *
+                 Math.sin(dLon/2) * Math.sin(dLon/2);
+        
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+    }
+
+    reconstructPath(endNode) {
+        const path = [];
+        let current = endNode;
+
+        while (current) {
+            path.unshift(current);
+            current = current.parent;
+        }
+
+        return path;
+    }
+
+    setSpeed(speed) {
+        this.speed = speed;
+    }
+
+    setPaused(paused) {
+        this.paused = paused;
+    }
+}
+
 class USMapPathfinder {
     constructor() {
+        console.log('Initializing US Map Pathfinder...');
         this.map = null;
         this.debug = true;
         this.currentBox = null;
@@ -52,9 +215,7 @@ class USMapPathfinder {
 
     initialize() {
         try {
-            this.log('Initializing map...');
-            
-            // Initialize map
+            this.log('Creating map instance...');
             this.map = L.map('map-container', {
                 center: [39.8283, -98.5795],
                 zoom: 4,
@@ -62,14 +223,19 @@ class USMapPathfinder {
                 maxZoom: 18
             });
 
-            // Add tile layer
+            this.log('Adding tile layer...');
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors',
                 maxZoom: 18
             }).addTo(this.map);
 
+            this.log('Setting up event listeners...');
             this.setupEventListeners();
-            this.map.whenReady(() => this.enableControls());
+
+            this.map.whenReady(() => {
+                this.log('Map is ready');
+                this.enableControls();
+            });
 
         } catch (error) {
             this.log('Error in initialization:', error);
@@ -79,26 +245,35 @@ class USMapPathfinder {
 
     setupEventListeners() {
         try {
-            // Button event listeners
-            document.getElementById('randomLocation').addEventListener('click', 
+            const elements = {
+                randomLocation: document.getElementById('randomLocation'),
+                clearPoints: document.getElementById('clearPoints'),
+                startSearch: document.getElementById('startSearch'),
+                pauseSearch: document.getElementById('pauseSearch'),
+                selectMode: document.getElementById('selectMode'),
+                speedControl: document.getElementById('speedControl')
+            };
+
+            if (!Object.values(elements).every(el => el)) {
+                throw new Error('Required DOM elements not found');
+            }
+
+            elements.randomLocation.addEventListener('click', 
                 () => this.generateRandomLocation());
-            document.getElementById('clearPoints').addEventListener('click', 
+            elements.clearPoints.addEventListener('click', 
                 () => this.clearPoints());
-            document.getElementById('startSearch').addEventListener('click', 
+            elements.startSearch.addEventListener('click', 
                 () => this.startPathfinding());
-            document.getElementById('pauseSearch').addEventListener('click', 
+            elements.pauseSearch.addEventListener('click', 
                 () => this.togglePause());
-            
-            // Control event listeners
-            document.getElementById('selectMode').addEventListener('change', 
+            elements.selectMode.addEventListener('change', 
                 (e) => this.selectMode = e.target.value);
-            document.getElementById('speedControl').addEventListener('input', 
+            elements.speedControl.addEventListener('input', 
                 (e) => this.searchSpeed = parseInt(e.target.value));
 
-            // Map click event
             this.map.on('click', (e) => this.handleMapClick(e));
-
             this.log('Event listeners set up successfully');
+
         } catch (error) {
             this.log('Error setting up event listeners:', error);
             document.getElementById('status').textContent = 'Error setting up controls';
@@ -138,19 +313,18 @@ class USMapPathfinder {
 
     createBoundingBox(lat, lng) {
         try {
+            this.log('Creating bounding box:', { lat, lng });
+            
             if (this.currentBox) this.currentBox.remove();
             if (this.gridLayer) this.gridLayer.remove();
 
-            // Constants for conversion
             const MILES_TO_KM = 1.60934;
             const KM_PER_DEGREE_LAT = 111.32;
             const KM_PER_DEGREE_LNG = 111.32 * Math.cos(lat * (Math.PI / 180));
 
-            // Convert 10x20 miles to kilometers
             const widthKm = 10 * MILES_TO_KM;
             const heightKm = 20 * MILES_TO_KM;
 
-            // Calculate degree offsets
             const latOffset = heightKm / (2 * KM_PER_DEGREE_LAT);
             const lngOffset = widthKm / (2 * KM_PER_DEGREE_LNG);
 
@@ -175,8 +349,8 @@ class USMapPathfinder {
                 maxZoom: 13
             });
 
-            // Generate grid
             this.generateGrid(this.currentBox.getBounds());
+            this.log('Bounding box created successfully');
 
         } catch (error) {
             this.log('Error creating bounding box:', error);
@@ -185,6 +359,7 @@ class USMapPathfinder {
     }
 
     generateGrid(bounds) {
+        this.log('Generating grid...');
         const gridData = [];
         const [[south, west], [north, east]] = [
             [bounds.getSouth(), bounds.getWest()],
@@ -194,19 +369,19 @@ class USMapPathfinder {
         const latStep = (north - south) / GRID_ROWS;
         const lngStep = (east - west) / GRID_COLS;
 
-        // Generate grid nodes
         for (let row = 0; row < GRID_ROWS; row++) {
             const gridRow = [];
             for (let col = 0; col < GRID_COLS; col++) {
                 const lat = south + (row * latStep);
                 const lng = west + (col * lngStep);
-                gridRow.push(new AStarNode(lat, lng));
+                gridRow.push(new AStarNode(lat, lng, row, col));
             }
             gridData.push(gridRow);
         }
 
         this.grid = gridData;
         this.visualizeGrid();
+        this.log('Grid generated successfully');
     }
 
     visualizeGrid() {
@@ -218,13 +393,13 @@ class USMapPathfinder {
         for (let row = 0; row < this.grid.length; row++) {
             for (let col = 0; col < this.grid[row].length; col++) {
                 const node = this.grid[row][col];
-                const bounds = [
+                const nodeBounds = [
                     [node.lat, node.lng],
                     [node.lat + (bounds.getNorth() - bounds.getSouth()) / GRID_ROWS,
                      node.lng + (bounds.getEast() - bounds.getWest()) / GRID_COLS]
                 ];
                 
-                L.rectangle(bounds, {
+                L.rectangle(nodeBounds, {
                     color: '#fff',
                     weight: 1,
                     fillOpacity: 0,
@@ -279,6 +454,8 @@ class USMapPathfinder {
         
         document.getElementById('startSearch').disabled = true;
         document.getElementById('status').textContent = 'Points cleared';
+        document.getElementById('nodesExplored').textContent = 'Nodes explored: 0';
+        document.getElementById('pathLength').textContent = 'Path length: 0.0 mi';
     }
 
     getGridPosition(latlng) {
@@ -312,6 +489,7 @@ class USMapPathfinder {
                 return;
             }
 
+            this.log('Starting A* pathfinding', { startPos, endPos });
             this.isSearching = true;
             document.getElementById('startSearch').disabled = true;
             document.getElementById('pauseSearch').disabled = false;
@@ -330,9 +508,9 @@ class USMapPathfinder {
             if (result) {
                 this.visualizePath(result.path);
                 document.getElementById('status').textContent = 'Path found!';
-                document.getElementById('nodesExplored').textContent =
+                document.getElementById('nodesExplored').textContent = 
                     `Nodes explored: ${result.nodesExplored}`;
-                document.getElementById('pathLength').textContent =
+                document.getElementById('pathLength').textContent = 
                     `Path length: ${this.calculatePathLength(result.path).toFixed(2)} mi`;
             } else {
                 document.getElementById('status').textContent = 'No path found';
@@ -352,13 +530,10 @@ class USMapPathfinder {
     visualizeSearch(state) {
         const { current, openSet, closedSet, nodesExplored } = state;
 
-        // Update metrics
         document.getElementById('nodesExplored').textContent = `Nodes explored: ${nodesExplored}`;
 
-        // Clear previous visualization
         this.gridLayer.clearLayers();
 
-        // Draw grid with search state
         const bounds = this.currentBox.getBounds();
         const latStep = (bounds.getNorth() - bounds.getSouth()) / GRID_ROWS;
         const lngStep = (bounds.getEast() - bounds.getWest()) / GRID_COLS;
@@ -399,7 +574,6 @@ class USMapPathfinder {
     }
 
     visualizePath(path) {
-        // Draw the final path
         const pathCoords = path.map(node => [node.lat, node.lng]);
         L.polyline(pathCoords, {
             color: '#4CAF50',
@@ -414,7 +588,6 @@ class USMapPathfinder {
             const node1 = path[i - 1];
             const node2 = path[i];
             
-            // Haversine formula for distance
             const R = 3959; // Earth's radius in miles
             const lat1 = node1.lat * Math.PI / 180;
             const lat2 = node2.lat * Math.PI / 180;
@@ -444,6 +617,7 @@ class USMapPathfinder {
 }
 
 // Initialize the application
+console.log('Starting application initialization...');
 window.addEventListener('load', () => {
     try {
         new USMapPathfinder();
