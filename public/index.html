@@ -3,23 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A* Pathfinding Visualization</title>
+    <title>US Map Pathfinding</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="style.css">
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="https://unpkg.com/topojson-client@3"></script>
-    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
 </head>
 <body>
-    <div class="container">
-        <div class="controls">
-            <button id="generateMap">Generate New Map</button>
-            <div class="info">
-                <p>Click two points on the map to find the shortest path</p>
-                <p id="status"></p>
-            </div>
+    <div id="controls">
+        <button id="randomLocation">Random US Location</button>
+        <div class="map-info">
+            <span id="coordinates">Click button to generate location</span>
+            <span id="boxSize">10mi x 20mi area</span>
         </div>
-        <div id="map"></div>
+        <div class="path-controls">
+            <label>Path Type:</label>
+            <select id="routeType">
+                <option value="driving">Driving</option>
+                <option value="walking">Walking</option>
+                <option value="cycling">Cycling</option>
+            </select>
+        </div>
     </div>
-    <script src="app.js"></script>
+    <div id="map-container"></div>
+    <div id="status">Ready to generate location</div>
+    
+    <!-- Scripts -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@7.0.0/turf.min.js"></script>
+    <script src="https://unpkg.com/osrm-client@0.8.3/dist/osrm-client.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>

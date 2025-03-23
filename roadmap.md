@@ -1,40 +1,58 @@
-# A* Pathfinding Visualization Roadmap
+# A* Pathfinding with Real US Map Enhancement Plan
+
+## Architecture Overview
 
 ```mermaid
 graph TD
-    A[User Interface] --> B[Map Canvas]
-    A --> C[Control Panel]
-    B --> D[SVG Renderer]
-    B --> E[Click Handlers]
-    D --> F[Path Visualization]
-    E --> G[Coordinate System]
-    C --> H[Algorithm Controls]
-    F --> I[Animation System]
-    H --> J[A* Parameters]
+    A[Real US Map Enhancement] --> B[Data Acquisition]
+    A --> C[Pathfinding Modifications]
+    A --> D[Visualization Updates]
+    
+    B --> B1[Download US Geographic Data]
+    B1 --> B1a[Highway Network]
+    B1 --> B1b[River Systems]
+    B1 --> B1c[Elevation Data]
+    
+    C --> C1[Graph Construction]
+    C1 --> C1a[Node: Geographic Coordinates]
+    C1 --> C1b[Edge: Road Types]
+    C1 --> C1c[Cost: Distance + Elevation]
+    
+    D --> D1[Map Features]
+    D1 --> D1a[Base Map: State Boundaries]
+    D1 --> D1b[Overlay: Highways/Rivers]
+    D1 --> D1c[Elevation Contours]
+    
+    D --> D2[Path Visualization]
+    D2 --> D2a[Route Highlighting]
+    D2 --> D2b[Cost Breakdown]
 ```
 
-## Implementation Checklist
+## Implementation Phases
 
-### Phase 1: Base Infrastructure
-- [ ] Create project structure
-- [ ] Add core dependencies (D3.js, Lodash)
-- [ ] Set up SVG coordinate system
-- [ ] Implement basic click handlers
+1. **Geospatial Data Integration**
+   - Source data from USGS National Map API
+   - Convert to TopoJSON format
+   - Implement elevation data processing
 
-### Phase 2: Core Features
-- [ ] A* implementation with terrain weights
-- [ ] Dynamic obstacle generation
-- [ ] Path reconstruction system
-- [ ] Basic line animation
+2. **Graph Construction Modifications**
+   - Replace grid system with geospatial nodes
+   - Add terrain cost calculations based on:
+     - Road classification (highway, local, etc.)
+     - Elevation changes
+     - Natural obstacles (rivers, mountains)
 
-### Phase 3: Advanced Features
-- [ ] Terrain difficulty visualization
-- [ ] Animation speed control
-- [ ] Path cost calculation
-- [ ] Multi-agent support
+3. **A* Algorithm Enhancements**
+   - Implement Haversine distance calculations
+   - Add terrain cost multipliers
+   - Create priority queue based on combined costs
 
-### Phase 4: Polish & Optimization
-- [ ] Mobile responsiveness
-- [ ] Performance profiling
-- [ ] Error handling
-- [ ] Documentation
+4. **Visualization Improvements**
+   - Layer management system for map features
+   - Interactive legend with cost explanations
+   - Path animation with progress metrics
+
+## Next Steps
+- Switch to Code mode for implementation
+- Begin with data integration phase
+- Follow iterative development approach

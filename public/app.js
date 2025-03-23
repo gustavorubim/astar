@@ -1,236 +1,152 @@
-class PathfindingVisualizer {
+class MapPathfinder {
     constructor() {
-        this.width = 800;
-        this.height = 600;
-        this.points = [];
-        this.terrain = new Map();
+        this.map = null;
+        this.routeLayer = null;
+        this.bboxLayer = null;
+        this.osrmClient = null;
         
-        this.svg = d3.select('#map')
-            .append('svg')
-            .attr('width', '100%')
-            .attr('height', '100%')
-            .attr('viewBox', `0 0 ${this.width} ${this.height}`)
-            .attr('preserveAspectRatio', 'xMidYMid meet');
+        // US boundary box for random location generation
+        this.usBounds = {
+            north: 49.384358,  // Northernmost point
+            south: 24.396308,  // Southernmost point
+            east: -66.934570,  // Easternmost point
+            west: -125.000000  // Westernmost point
+        };
 
-        this.projection = d3.geoAlbersUsa()
-            .translate([this.width / 2, this.height / 2])
-            .scale(1000);
+        this.initialize();
+    }
 
-        this.path = d3.geoPath()
-            .projection(this.projection);
+    initialize() {
+        // Initialize map
+        this.map = L.map('map-container', {
+            center: [39.8283, -98.5795], // Geographic center of USA
+            zoom: 4
+        });
+
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(this.map);
+
+        // Initialize layers for route and bounding box
+        this.routeLayer = L.layerGroup().addTo(this.map);
+        this.bboxLayer = L.layerGroup().addTo(this.map);
 
         this.setupEventListeners();
-        this.loadAndDisplayMap();
     }
 
     setupEventListeners() {
-        document.getElementById('generateMap').addEventListener('click', () => {
-            this.resetMap();
-            this.generateRandomTerrain();
-        });
+        const randomButton = document.getElementById('randomLocation');
+        randomButton.addEventListener('click', () => this.generateRandomLocation());
 
-        this.svg.on('click', (event) => {
-            const [x, y] = d3.pointer(event);
-            if (this.points.length < 2) {
-                this.addPoint(x, y);
-            }
-            if (this.points.length === 2) {
-                this.findPath();
+        const routeSelect = document.getElementById('routeType');
+        routeSelect.addEventListener('change', () => {
+            if (this.currentLocation) {
+                this.updateRouteDisplay();
             }
         });
     }
 
-    async loadAndDisplayMap() {
-        try {
-            const response = await fetch('https://d3js.org/us-10m.v1.json');
-            const us = await response.json();
-            
-            this.svg.append('g')
-                .selectAll('path')
-                .data(topojson.feature(us, us.objects.states).features)
-                .enter()
-                .append('path')
-                .attr('class', 'state')
-                .attr('d', this.path);
-
-            this.generateRandomTerrain();
-        } catch (error) {
-            console.error('Error loading map:', error);
-            document.getElementById('status').textContent = 'Error loading map';
-        }
-    }
-
-    generateRandomTerrain() {
-        this.terrain.clear();
-        // Add random terrain difficulty (1-5) for each grid cell
-        for (let x = 0; x < this.width; x += 20) {
-            for (let y = 0; y < this.height; y += 20) {
-                if (Math.random() < 0.3) { // 30% chance of terrain
-                    this.terrain.set(`${x},${y}`, Math.floor(Math.random() * 5) + 1);
-                }
-            }
-        }
-        this.visualizeTerrain();
-    }
-
-    visualizeTerrain() {
-        const terrainGroup = this.svg.select('.terrain-group');
-        if (terrainGroup.empty()) {
-            this.svg.append('g')
-                .attr('class', 'terrain-group');
-        }
-
-        const terrainData = Array.from(this.terrain.entries())
-            .map(([coord, difficulty]) => {
-                const [x, y] = coord.split(',').map(Number);
-                return { x, y, difficulty };
-            });
-
-        const colorScale = d3.scaleLinear()
-            .domain([1, 5])
-            .range(['#ffeda0', '#f03b20']);
-
-        this.svg.select('.terrain-group')
-            .selectAll('rect')
-            .data(terrainData)
-            .join('rect')
-            .attr('x', d => d.x)
-            .attr('y', d => d.y)
-            .attr('width', 20)
-            .attr('height', 20)
-            .attr('fill', d => colorScale(d.difficulty))
-            .attr('opacity', 0.5);
-    }
-
-    addPoint(x, y) {
-        this.points.push([x, y]);
-        this.svg.append('circle')
-            .attr('class', 'point')
-            .attr('cx', x)
-            .attr('cy', y);
+    generateRandomLocation() {
+        // Generate random coordinates within US bounds
+        const lat = Math.random() * (this.usBounds.north - this.usBounds.south) + this.usBounds.south;
+        const lng = Math.random() * (this.usBounds.east - this.usBounds.west) + this.usBounds.west;
         
-        document.getElementById('status').textContent = 
-            this.points.length === 1 ? 'Select destination point' : 'Finding path...';
+        this.currentLocation = [lat, lng];
+        this.updateMapView();
     }
 
-    resetMap() {
-        this.points = [];
-        this.svg.selectAll('.point').remove();
-        this.svg.selectAll('.path').remove();
-        this.svg.selectAll('.visited').remove();
-        document.getElementById('status').textContent = 'Select starting point';
+    updateMapView() {
+        // Clear previous layers
+        this.routeLayer.clearLayers();
+        this.bboxLayer.clearLayers();
+
+        // Create 10x20 mile bounding box
+        const bbox = this.createBoundingBox(this.currentLocation[0], this.currentLocation[1], 10, 20);
+        
+        // Draw bounding box
+        const bboxPolygon = L.polygon([
+            [bbox.north, bbox.west],
+            [bbox.north, bbox.east],
+            [bbox.south, bbox.east],
+            [bbox.south, bbox.west]
+        ], {
+            color: '#f44336',
+            weight: 2,
+            fillOpacity: 0,
+            dashArray: '5, 5'
+        }).addTo(this.bboxLayer);
+
+        // Update map view
+        this.map.fitBounds(bboxPolygon.getBounds(), {
+            padding: [50, 50]
+        });
+
+        // Update coordinate display
+        document.getElementById('coordinates').textContent = 
+            `${this.currentLocation[0].toFixed(4)}, ${this.currentLocation[1].toFixed(4)}`;
+        
+        // Fetch and display routes
+        this.fetchRoutes(bbox);
     }
 
-    async findPath() {
-        const [start, end] = this.points;
-        const path = await this.astar(start, end);
-        if (path) {
-            this.animatePath(path);
-        }
+    createBoundingBox(lat, lng, widthMiles, heightMiles) {
+        // Convert miles to kilometers for turf.js
+        const widthKm = widthMiles * 1.60934;
+        const heightKm = heightMiles * 1.60934;
+
+        // Create bounding box using turf.js
+        const point = turf.point([lng, lat]);
+        const boxPolygon = turf.bbox(turf.buffer(point, Math.max(widthKm, heightKm) / 2, {
+            units: 'kilometers'
+        }));
+
+        return {
+            west: boxPolygon[0],
+            south: boxPolygon[1],
+            east: boxPolygon[2],
+            north: boxPolygon[3]
+        };
     }
 
-    heuristic(a, b) {
-        return Math.sqrt(Math.pow(b[0] - a[0], 2) + Math.pow(b[1] - a[1], 2));
-    }
+    async fetchRoutes(bbox) {
+        try {
+            document.getElementById('status').textContent = 'Fetching route data...';
 
-    getNeighbors([x, y]) {
-        const directions = [
-            [0, -20], [20, 0], [0, 20], [-20, 0],
-            [-20, -20], [20, -20], [20, 20], [-20, 20]
-        ];
-        return directions
-            .map(([dx, dy]) => [x + dx, y + dy])
-            .filter(([nx, ny]) => 
-                nx >= 0 && nx < this.width && 
-                ny >= 0 && ny < this.height
-            );
-    }
+            const routeType = document.getElementById('routeType').value;
+            const url = `https://router.project-osrm.org/route/v1/${routeType}/` +
+                       `${this.currentLocation[1]},${this.currentLocation[0]};` +
+                       `${bbox.east},${bbox.north}?overview=full&geometries=geojson`;
 
-    async astar(start, end) {
-        const gridStart = [
-            Math.round(start[0] / 20) * 20,
-            Math.round(start[1] / 20) * 20
-        ];
-        const gridEnd = [
-            Math.round(end[0] / 20) * 20,
-            Math.round(end[1] / 20) * 20
-        ];
+            const response = await fetch(url);
+            const data = await response.json();
 
-        const openSet = new Set([gridStart.toString()]);
-        const cameFrom = new Map();
-        const gScore = new Map([[gridStart.toString(), 0]]);
-        const fScore = new Map([[gridStart.toString(), this.heuristic(gridStart, gridEnd)]]);
-
-        while (openSet.size > 0) {
-            let current = Array.from(openSet)
-                .reduce((a, b) => (fScore.get(a) || Infinity) < (fScore.get(b) || Infinity) ? a : b);
-            
-            if (current === gridEnd.toString()) {
-                return this.reconstructPath(cameFrom, current);
+            if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+                this.displayRoute(data.routes[0].geometry);
+                document.getElementById('status').textContent = 'Route displayed';
+            } else {
+                document.getElementById('status').textContent = 'No route found';
             }
+        } catch (error) {
+            console.error('Route fetch error:', error);
+            document.getElementById('status').textContent = 'Error fetching route';
+        }
+    }
 
-            openSet.delete(current);
-            const [cx, cy] = current.split(',').map(Number);
-            
-            // Visualize visited node
-            this.svg.append('rect')
-                .attr('class', 'visited')
-                .attr('x', cx)
-                .attr('y', cy)
-                .attr('width', 20)
-                .attr('height', 20);
-
-            await new Promise(resolve => setTimeout(resolve, 10)); // Animation delay
-
-            for (let neighbor of this.getNeighbors([cx, cy])) {
-                const neighborStr = neighbor.toString();
-                const tentativeGScore = (gScore.get(current) || 0) + 
-                    (this.terrain.get(neighborStr) || 1);
-
-                if (!gScore.has(neighborStr) || tentativeGScore < gScore.get(neighborStr)) {
-                    cameFrom.set(neighborStr, current);
-                    gScore.set(neighborStr, tentativeGScore);
-                    fScore.set(neighborStr, tentativeGScore + this.heuristic(neighbor, gridEnd));
-                    openSet.add(neighborStr);
-                }
+    displayRoute(geometry) {
+        this.routeLayer.clearLayers();
+        
+        L.geoJSON(geometry, {
+            style: {
+                color: '#4CAF50',
+                weight: 4,
+                opacity: 0.8
             }
-        }
-
-        document.getElementById('status').textContent = 'No path found!';
-        return null;
-    }
-
-    reconstructPath(cameFrom, current) {
-        const path = [current];
-        while (cameFrom.has(current)) {
-            current = cameFrom.get(current);
-            path.unshift(current);
-        }
-        return path.map(pos => pos.split(',').map(Number));
-    }
-
-    animatePath(path) {
-        const lineGenerator = d3.line();
-        const pathElement = this.svg.append('path')
-            .attr('class', 'path')
-            .attr('d', lineGenerator(path))
-            .attr('stroke-dasharray', function() {
-                return this.getTotalLength();
-            })
-            .attr('stroke-dashoffset', function() {
-                return this.getTotalLength();
-            });
-
-        pathElement.transition()
-            .duration(1000)
-            .attr('stroke-dashoffset', 0)
-            .on('end', () => {
-                document.getElementById('status').textContent = 'Path found!';
-            });
+        }).addTo(this.routeLayer);
     }
 }
 
-// Initialize the visualizer when the page loads
+// Initialize the application when the page loads
 window.addEventListener('load', () => {
-    new PathfindingVisualizer();
+    new MapPathfinder();
 });
