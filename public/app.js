@@ -215,12 +215,19 @@ class USMapPathfinder {
 
     initialize() {
         try {
+            const mapContainer = document.getElementById('map-container');
+            if (!mapContainer) {
+                throw new Error('Map container not found');
+            }
+
             this.log('Creating map instance...');
             this.map = L.map('map-container', {
                 center: [39.8283, -98.5795],
                 zoom: 4,
                 minZoom: 3,
-                maxZoom: 18
+                maxZoom: 18,
+                zoomControl: true,
+                attributionControl: true
             });
 
             this.log('Adding tile layer...');
@@ -229,17 +236,27 @@ class USMapPathfinder {
                 maxZoom: 18
             }).addTo(this.map);
 
+            // Bind click event with context
+            this.handleMapClick = this.handleMapClick.bind(this);
+            this.map.on('click', this.handleMapClick);
+
             this.log('Setting up event listeners...');
             this.setupEventListeners();
 
             this.map.whenReady(() => {
                 this.log('Map is ready');
                 this.enableControls();
+                document.getElementById('status').textContent = 'Map ready - Click Random US Location';
+            });
+
+            // Add debug click handler
+            this.map.on('click', (e) => {
+                this.log('Map clicked at coordinates:', e.latlng);
             });
 
         } catch (error) {
             this.log('Error in initialization:', error);
-            document.getElementById('status').textContent = 'Failed to initialize map';
+            document.getElementById('status').textContent = 'Failed to initialize map: ' + error.message;
         }
     }
 
@@ -296,18 +313,29 @@ class USMapPathfinder {
         try {
             this.log('Generating random location...');
             
+            // Clear any existing points and grid
+            this.clearPoints();
+            
+            // Generate random coordinates within US bounds
             const lat = Math.random() * (this.usBounds.north - this.usBounds.south) + this.usBounds.south;
             const lng = Math.random() * (this.usBounds.east - this.usBounds.west) + this.usBounds.west;
             
-            this.clearPoints();
+            this.log('Generated coordinates:', { lat, lng });
+            
+            // Create the bounding box
             this.createBoundingBox(lat, lng);
             
-            document.getElementById('status').textContent = 
-                `Location selected: ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°W`;
+            // Update status and enable selection mode
+            document.getElementById('selectMode').disabled = false;
+            document.getElementById('status').textContent =
+                `Location selected: ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°W - Click to set start/end points`;
+
+            // Ensure the map is centered on the new location
+            this.map.setView([lat, lng], 10);
 
         } catch (error) {
             this.log('Error generating location:', error);
-            document.getElementById('status').textContent = 'Error generating location';
+            document.getElementById('status').textContent = 'Error generating location: ' + error.message;
         }
     }
 
@@ -410,35 +438,73 @@ class USMapPathfinder {
     }
 
     handleMapClick(e) {
-        if (!this.currentBox) return;
+        this.log('Map clicked', { lat: e.latlng.lat, lng: e.latlng.lng });
+        
+        if (!this.currentBox) {
+            this.log('No bounding box exists');
+            document.getElementById('status').textContent = 'Generate a location first';
+            return;
+        }
         
         const bounds = this.currentBox.getBounds();
-        if (!bounds.contains(e.latlng)) {
+        const contains = bounds.contains(e.latlng);
+        
+        this.log('Click bounds check', {
+            clickLat: e.latlng.lat,
+            clickLng: e.latlng.lng,
+            bounds: {
+                north: bounds.getNorth(),
+                south: bounds.getSouth(),
+                east: bounds.getEast(),
+                west: bounds.getWest()
+            },
+            contains
+        });
+
+        if (!contains) {
             document.getElementById('status').textContent = 'Click inside the selected area';
             return;
         }
 
-        if (this.selectMode === 'start') {
-            if (this.startMarker) this.startMarker.remove();
-            this.startMarker = L.marker(e.latlng, {
-                icon: L.divIcon({
-                    className: 'start-marker',
-                    html: '🟢',
-                    iconSize: [24, 24]
-                })
-            }).addTo(this.map);
-        } else {
-            if (this.endMarker) this.endMarker.remove();
-            this.endMarker = L.marker(e.latlng, {
-                icon: L.divIcon({
-                    className: 'end-marker',
-                    html: '🔴',
-                    iconSize: [24, 24]
-                })
-            }).addTo(this.map);
-        }
+        try {
+            // Create marker icon with explicit size and anchor
+            const icon = L.divIcon({
+                className: this.selectMode === 'start' ? 'start-marker' : 'end-marker',
+                html: this.selectMode === 'start' ? '🟢' : '🔴',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]  // Center the icon on the point
+            });
 
-        document.getElementById('startSearch').disabled = !(this.startMarker && this.endMarker);
+            // Update appropriate marker
+            if (this.selectMode === 'start') {
+                this.log('Setting start marker');
+                if (this.startMarker) {
+                    this.startMarker.remove();
+                }
+                this.startMarker = L.marker(e.latlng, { icon }).addTo(this.map);
+                document.getElementById('status').textContent = 'Start point set';
+            } else {
+                this.log('Setting end marker');
+                if (this.endMarker) {
+                    this.endMarker.remove();
+                }
+                this.endMarker = L.marker(e.latlng, { icon }).addTo(this.map);
+                document.getElementById('status').textContent = 'End point set';
+            }
+
+            // Update search button state
+            const startSearchBtn = document.getElementById('startSearch');
+            if (startSearchBtn) {
+                startSearchBtn.disabled = !(this.startMarker && this.endMarker);
+                if (this.startMarker && this.endMarker) {
+                    document.getElementById('status').textContent = 'Ready to start pathfinding';
+                }
+            }
+
+        } catch (error) {
+            this.log('Error in handleMapClick:', error);
+            document.getElementById('status').textContent = 'Error setting point';
+        }
     }
 
     clearPoints() {
