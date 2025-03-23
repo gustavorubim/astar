@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>A* Pathfinding on US Map</title>
+    <title>A* Pathfinding on Real Roads</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
@@ -14,6 +14,11 @@
     <div id="controls">
         <div class="control-group">
             <button id="randomLocation" disabled>Random US Location</button>
+            <select id="areaSize" disabled>
+                <option value="small">Small Area (1km²)</option>
+                <option value="medium" selected>Medium Area (4km²)</option>
+                <option value="large">Large Area (9km²)</option>
+            </select>
             <button id="clearPoints" disabled>Clear Points</button>
         </div>
         <div class="control-group">
@@ -21,18 +26,47 @@
                 <option value="start">Select Start Point</option>
                 <option value="end">Select End Point</option>
             </select>
-            <button id="startSearch" disabled>Start A* Search</button>
+            <button id="startSearch" disabled>Find Path</button>
         </div>
         <div class="control-group">
-            <label>Animation Speed:</label>
+            <label>Search Speed:</label>
             <input type="range" id="speedControl" min="1" max="10" value="5" disabled>
+            <span id="speedValue">Normal</span>
             <button id="pauseSearch" disabled>Pause</button>
         </div>
     </div>
+    
     <div id="metrics">
+        <span id="searchStatus">Status: Initializing...</span>
         <span id="nodesExplored">Nodes explored: 0</span>
         <span id="pathLength">Path length: 0.0 mi</span>
+        <span id="estimatedTime">Est. time: 0 mins</span>
     </div>
+
+    <div id="algorithm-info">
+        <div class="info-panel">
+            <h3>Current Node</h3>
+            <p>g-score: <span id="gScore">0</span></p>
+            <p>h-score: <span id="hScore">0</span></p>
+            <p>f-score: <span id="fScore">0</span></p>
+        </div>
+        <div class="info-panel">
+            <h3>Legend</h3>
+            <div class="legend-item">
+                <span class="color-box open"></span>Open Set (to explore)
+            </div>
+            <div class="legend-item">
+                <span class="color-box closed"></span>Closed Set (explored)
+            </div>
+            <div class="legend-item">
+                <span class="color-box current"></span>Current Node
+            </div>
+            <div class="legend-item">
+                <span class="color-box path"></span>Final Path
+            </div>
+        </div>
+    </div>
+
     <div id="map-container"></div>
     <div id="status">Initializing map...</div>
     
@@ -40,6 +74,8 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
             crossorigin="anonymous"></script>
+    <script src="road_network.js"></script>
+    <script src="pathfinder.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

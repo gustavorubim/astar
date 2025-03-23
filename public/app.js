@@ -1,196 +1,14 @@
-// Grid settings
-const GRID_ROWS = 50;
-const GRID_COLS = 100;
-
-class PriorityQueue {
+class PathfindingVisualizer {
     constructor() {
-        this.values = [];
-    }
-
-    enqueue(element, priority) {
-        this.values.push({ element, priority });
-        this.sort();
-    }
-
-    dequeue() {
-        return this.values.shift();
-    }
-
-    sort() {
-        this.values.sort((a, b) => a.priority - b.priority);
-    }
-}
-
-class AStarNode {
-    constructor(lat, lng, row, col) {
-        this.lat = lat;
-        this.lng = lng;
-        this.row = row;
-        this.col = col;
-        this.index = row * GRID_COLS + col;
-        this.g = Infinity;  // Cost from start to this node
-        this.h = 0;        // Heuristic (estimated cost to end)
-        this.f = Infinity; // Total cost (g + h)
-        this.parent = null;
-        this.isWall = false;
-    }
-}
-
-class AStarPathfinder {
-    constructor(grid, startPos, endPos, visualCallback) {
-        this.grid = grid;
-        this.startPos = startPos;
-        this.endPos = endPos;
-        this.visualCallback = visualCallback;
-        this.openSet = new PriorityQueue();
-        this.closedSet = new Set();
-        this.paused = false;
-        this.speed = 5;
-    }
-
-    async findPath() {
-        console.log('Starting pathfinding...', {
-            start: this.startPos,
-            end: this.endPos
-        });
-
-        const startNode = this.grid[this.startPos.row][this.startPos.col];
-        const endNode = this.grid[this.endPos.row][this.endPos.col];
-
-        startNode.g = 0;
-        startNode.h = this.heuristic(startNode, endNode);
-        startNode.f = startNode.h;
-
-        this.openSet.enqueue(startNode, startNode.f);
-        let nodesExplored = 0;
-
-        while (this.openSet.values.length > 0) {
-            if (this.paused) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-                continue;
-            }
-
-            const current = this.openSet.dequeue().element;
-            nodesExplored++;
-
-            if (current === endNode) {
-                console.log('Path found!', { nodesExplored });
-                return {
-                    path: this.reconstructPath(endNode),
-                    nodesExplored
-                };
-            }
-
-            this.closedSet.add(current);
-
-            const neighbors = this.getNeighbors(current);
-            for (const neighbor of neighbors) {
-                if (this.closedSet.has(neighbor) || neighbor.isWall) {
-                    continue;
-                }
-
-                const tentativeG = current.g + this.distance(current, neighbor);
-
-                if (tentativeG < neighbor.g) {
-                    neighbor.parent = current;
-                    neighbor.g = tentativeG;
-                    neighbor.h = this.heuristic(neighbor, endNode);
-                    neighbor.f = neighbor.g + neighbor.h;
-
-                    if (!this.openSet.values.some(v => v.element === neighbor)) {
-                        this.openSet.enqueue(neighbor, neighbor.f);
-                    }
-                }
-            }
-
-            if (this.visualCallback) {
-                this.visualCallback({
-                    current,
-                    openSet: this.openSet.values.map(v => v.element),
-                    closedSet: Array.from(this.closedSet),
-                    nodesExplored
-                });
-                await new Promise(resolve => 
-                    setTimeout(resolve, Math.max(1, 11 - this.speed) * 50)
-                );
-            }
-        }
-
-        console.log('No path found', { nodesExplored });
-        return null;
-    }
-
-    getNeighbors(node) {
-        const neighbors = [];
-        const directions = [
-            [-1, 0], [1, 0], [0, -1], [0, 1],  // Cardinals
-            [-1, -1], [-1, 1], [1, -1], [1, 1]  // Diagonals
-        ];
-
-        for (const [dx, dy] of directions) {
-            const newRow = node.row + dx;
-            const newCol = node.col + dy;
-
-            if (newRow >= 0 && newRow < GRID_ROWS &&
-                newCol >= 0 && newCol < GRID_COLS) {
-                neighbors.push(this.grid[newRow][newCol]);
-            }
-        }
-
-        return neighbors;
-    }
-
-    heuristic(node, goal) {
-        return this.distance(node, goal);
-    }
-
-    distance(nodeA, nodeB) {
-        // Using haversine formula for geographic distance
-        const R = 3959; // Earth's radius in miles
-        const lat1 = nodeA.lat * Math.PI / 180;
-        const lat2 = nodeB.lat * Math.PI / 180;
-        const dLat = (nodeB.lat - nodeA.lat) * Math.PI / 180;
-        const dLon = (nodeB.lng - nodeA.lng) * Math.PI / 180;
-
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                 Math.cos(lat1) * Math.cos(lat2) *
-                 Math.sin(dLon/2) * Math.sin(dLon/2);
-        
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        return R * c;
-    }
-
-    reconstructPath(endNode) {
-        const path = [];
-        let current = endNode;
-
-        while (current) {
-            path.unshift(current);
-            current = current.parent;
-        }
-
-        return path;
-    }
-
-    setSpeed(speed) {
-        this.speed = speed;
-    }
-
-    setPaused(paused) {
-        this.paused = paused;
-    }
-}
-
-class USMapPathfinder {
-    constructor() {
-        console.log('Initializing US Map Pathfinder...');
         this.map = null;
         this.debug = true;
-        this.currentBox = null;
+        this.roadNetwork = new RoadNetwork();
+        this.pathfinder = new RoadPathfinder(this.roadNetwork);
         this.startMarker = null;
         this.endMarker = null;
-        this.grid = [];
-        this.gridLayer = null;
+        this.roadLayer = null;
+        this.searchLayer = null;
+        this.pathLayer = null;
         this.selectMode = 'start';
         this.isSearching = false;
         this.searchSpeed = 5;
@@ -209,7 +27,7 @@ class USMapPathfinder {
 
     log(message, data = null) {
         if (this.debug) {
-            console.log(`[USMapPathfinder] ${message}`, data || '');
+            console.log(`[PathfindingVisualizer] ${message}`, data || '');
         }
     }
 
@@ -230,28 +48,23 @@ class USMapPathfinder {
                 attributionControl: true
             });
 
-            this.log('Adding tile layer...');
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors',
                 maxZoom: 18
             }).addTo(this.map);
 
-            // Bind click event with context
-            this.handleMapClick = this.handleMapClick.bind(this);
-            this.map.on('click', this.handleMapClick);
+            // Create layers
+            this.roadLayer = L.layerGroup().addTo(this.map);
+            this.searchLayer = L.layerGroup().addTo(this.map);
+            this.pathLayer = L.layerGroup().addTo(this.map);
 
-            this.log('Setting up event listeners...');
             this.setupEventListeners();
+            this.pathfinder.setVisualizationCallback((state) => this.visualizeSearch(state));
 
             this.map.whenReady(() => {
                 this.log('Map is ready');
                 this.enableControls();
                 document.getElementById('status').textContent = 'Map ready - Click Random US Location';
-            });
-
-            // Add debug click handler
-            this.map.on('click', (e) => {
-                this.log('Map clicked at coordinates:', e.latlng);
             });
 
         } catch (error) {
@@ -268,25 +81,34 @@ class USMapPathfinder {
                 startSearch: document.getElementById('startSearch'),
                 pauseSearch: document.getElementById('pauseSearch'),
                 selectMode: document.getElementById('selectMode'),
-                speedControl: document.getElementById('speedControl')
+                speedControl: document.getElementById('speedControl'),
+                areaSize: document.getElementById('areaSize')
             };
 
             if (!Object.values(elements).every(el => el)) {
                 throw new Error('Required DOM elements not found');
             }
 
-            elements.randomLocation.addEventListener('click', 
-                () => this.generateRandomLocation());
-            elements.clearPoints.addEventListener('click', 
-                () => this.clearPoints());
-            elements.startSearch.addEventListener('click', 
-                () => this.startPathfinding());
-            elements.pauseSearch.addEventListener('click', 
-                () => this.togglePause());
-            elements.selectMode.addEventListener('change', 
-                (e) => this.selectMode = e.target.value);
-            elements.speedControl.addEventListener('input', 
-                (e) => this.searchSpeed = parseInt(e.target.value));
+            elements.randomLocation.addEventListener('click', () => this.generateRandomLocation());
+            elements.clearPoints.addEventListener('click', () => this.clearPoints());
+            elements.startSearch.addEventListener('click', () => this.startPathfinding());
+            elements.pauseSearch.addEventListener('click', () => this.togglePause());
+            elements.selectMode.addEventListener('change', (e) => this.selectMode = e.target.value);
+            
+            // Speed control with visual feedback
+            elements.speedControl.addEventListener('input', (e) => {
+                this.searchSpeed = parseInt(e.target.value);
+                this.pathfinder.setSpeed(this.searchSpeed);
+                this.updateSpeedDisplay();
+            });
+
+            // Area size selection
+            elements.areaSize.addEventListener('change', (e) => {
+                this.log('Area size changed:', e.target.value);
+                if (this.roadNetwork.ready) {
+                    this.generateRandomLocation();
+                }
+            });
 
             this.map.on('click', (e) => this.handleMapClick(e));
             this.log('Event listeners set up successfully');
@@ -297,208 +119,168 @@ class USMapPathfinder {
         }
     }
 
+    getAreaSize() {
+        const sizeValues = {
+            'small': 0.02,  // ~2km at equator
+            'medium': 0.05, // ~5km at equator
+            'large': 0.1    // ~10km at equator
+        };
+        const areaSelect = document.getElementById('areaSize');
+        return sizeValues[areaSelect.value] || sizeValues.medium;
+    }
+
+    updateSpeedDisplay() {
+        const speedLabels = {
+            1: 'Very Slow',
+            2: 'Slow',
+            3: 'Slow+',
+            4: 'Normal-',
+            5: 'Normal',
+            6: 'Normal+',
+            7: 'Fast-',
+            8: 'Fast',
+            9: 'Fast+',
+            10: 'Very Fast'
+        };
+        const speedValue = document.getElementById('speedValue');
+        if (speedValue) {
+            speedValue.textContent = speedLabels[this.searchSpeed] || 'Normal';
+        }
+    }
+
     enableControls() {
         const controls = [
-            'randomLocation', 'clearPoints', 'selectMode',
-            'startSearch', 'speedControl'
+            'randomLocation', 'selectMode', 'areaSize', 'speedControl'
         ];
         controls.forEach(id => {
             const element = document.getElementById(id);
-            if (element) element.disabled = false;
+            if (element) {
+                element.disabled = false;
+                if (id === 'speedControl') {
+                    this.updateSpeedDisplay();
+                }
+            }
         });
-        document.getElementById('status').textContent = 'Map ready - Generate or select a location';
     }
 
-    generateRandomLocation() {
+    async generateRandomLocation() {
         try {
             this.log('Generating random location...');
-            
-            // Clear any existing points and grid
             this.clearPoints();
             
-            // Generate random coordinates within US bounds
             const lat = Math.random() * (this.usBounds.north - this.usBounds.south) + this.usBounds.south;
             const lng = Math.random() * (this.usBounds.east - this.usBounds.west) + this.usBounds.west;
             
-            this.log('Generated coordinates:', { lat, lng });
+            // Get area size from selector
+            const boxSize = this.getAreaSize();
             
-            // Create the bounding box
-            this.createBoundingBox(lat, lng);
-            
-            // Update status and enable selection mode
-            document.getElementById('selectMode').disabled = false;
-            document.getElementById('status').textContent =
-                `Location selected: ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°W - Click to set start/end points`;
+            // Adjust for longitude distortion based on latitude
+            const lngScale = Math.cos(lat * Math.PI / 180);
+            const bounds = {
+                south: lat - boxSize,
+                north: lat + boxSize,
+                west: lng - boxSize / lngScale,
+                east: lng + boxSize / lngScale
+            };
 
-            // Ensure the map is centered on the new location
-            this.map.setView([lat, lng], 10);
+            document.getElementById('status').textContent = 'Fetching road data...';
+            const success = await this.roadNetwork.fetchRoadData(bounds);
+            
+            if (success) {
+                this.visualizeRoadNetwork();
+                this.map.fitBounds([
+                    [bounds.south, bounds.west],
+                    [bounds.north, bounds.east]
+                ], { padding: [50, 50] });
+                
+                // Enable speed control and update display
+                document.getElementById('speedControl').disabled = false;
+                this.updateSpeedDisplay();
+                
+                document.getElementById('status').textContent =
+                    'Road network loaded - Select start and end points';
+            } else {
+                document.getElementById('status').textContent =
+                    'Failed to load road data - Try a different location';
+            }
 
         } catch (error) {
             this.log('Error generating location:', error);
-            document.getElementById('status').textContent = 'Error generating location: ' + error.message;
+            document.getElementById('status').textContent = 'Error loading location: ' + error.message;
         }
     }
 
-    createBoundingBox(lat, lng) {
-        try {
-            this.log('Creating bounding box:', { lat, lng });
-            
-            if (this.currentBox) this.currentBox.remove();
-            if (this.gridLayer) this.gridLayer.remove();
-
-            const MILES_TO_KM = 1.60934;
-            const KM_PER_DEGREE_LAT = 111.32;
-            const KM_PER_DEGREE_LNG = 111.32 * Math.cos(lat * (Math.PI / 180));
-
-            const widthKm = 10 * MILES_TO_KM;
-            const heightKm = 20 * MILES_TO_KM;
-
-            const latOffset = heightKm / (2 * KM_PER_DEGREE_LAT);
-            const lngOffset = widthKm / (2 * KM_PER_DEGREE_LNG);
-
-            const bounds = [
-                [lat + latOffset, lng - lngOffset],
-                [lat + latOffset, lng + lngOffset],
-                [lat - latOffset, lng + lngOffset],
-                [lat - latOffset, lng - lngOffset],
-                [lat + latOffset, lng - lngOffset]
-            ];
-
-            this.currentBox = L.polygon(bounds, {
-                color: '#f44336',
-                weight: 2,
-                fillColor: '#f44336',
-                fillOpacity: 0.1,
-                dashArray: '5, 5'
-            }).addTo(this.map);
-
-            this.map.fitBounds(this.currentBox.getBounds(), {
-                padding: [50, 50],
-                maxZoom: 13
-            });
-
-            this.generateGrid(this.currentBox.getBounds());
-            this.log('Bounding box created successfully');
-
-        } catch (error) {
-            this.log('Error creating bounding box:', error);
-            document.getElementById('status').textContent = 'Error creating area selection';
-        }
-    }
-
-    generateGrid(bounds) {
-        this.log('Generating grid...');
-        const gridData = [];
-        const [[south, west], [north, east]] = [
-            [bounds.getSouth(), bounds.getWest()],
-            [bounds.getNorth(), bounds.getEast()]
-        ];
-
-        const latStep = (north - south) / GRID_ROWS;
-        const lngStep = (east - west) / GRID_COLS;
-
-        for (let row = 0; row < GRID_ROWS; row++) {
-            const gridRow = [];
-            for (let col = 0; col < GRID_COLS; col++) {
-                const lat = south + (row * latStep);
-                const lng = west + (col * lngStep);
-                gridRow.push(new AStarNode(lat, lng, row, col));
-            }
-            gridData.push(gridRow);
-        }
-
-        this.grid = gridData;
-        this.visualizeGrid();
-        this.log('Grid generated successfully');
-    }
-
-    visualizeGrid() {
-        if (this.gridLayer) this.gridLayer.remove();
-
-        this.gridLayer = L.layerGroup().addTo(this.map);
-        const bounds = this.currentBox.getBounds();
+    visualizeRoadNetwork() {
+        this.roadLayer.clearLayers();
         
-        for (let row = 0; row < this.grid.length; row++) {
-            for (let col = 0; col < this.grid[row].length; col++) {
-                const node = this.grid[row][col];
-                const nodeBounds = [
-                    [node.lat, node.lng],
-                    [node.lat + (bounds.getNorth() - bounds.getSouth()) / GRID_ROWS,
-                     node.lng + (bounds.getEast() - bounds.getWest()) / GRID_COLS]
-                ];
-                
-                L.rectangle(nodeBounds, {
-                    color: '#fff',
-                    weight: 1,
-                    fillOpacity: 0,
-                    opacity: 0.2
-                }).addTo(this.gridLayer);
+        // Draw all road segments
+        for (const edge of this.roadNetwork.edges.values()) {
+            if (edge.path.length < 2) continue;
+
+            const line = L.polyline(edge.path, {
+                color: '#ffffff',
+                weight: this.getRoadWeight(edge.roadType),
+                opacity: 0.6,
+                className: `road road-${edge.roadType}`
+            }).addTo(this.roadLayer);
+
+            // Optional: Add road name on hover
+            if (edge.name) {
+                line.bindTooltip(edge.name);
             }
         }
+    }
+
+    getRoadWeight(roadType) {
+        const weights = {
+            'motorway': 5,
+            'trunk': 4,
+            'primary': 3,
+            'secondary': 2.5,
+            'tertiary': 2,
+            'residential': 1.5,
+            'service': 1
+        };
+        return weights[roadType] || 1.5;
     }
 
     handleMapClick(e) {
-        this.log('Map clicked', { lat: e.latlng.lat, lng: e.latlng.lng });
-        
-        if (!this.currentBox) {
-            this.log('No bounding box exists');
+        if (!this.roadNetwork.ready) {
             document.getElementById('status').textContent = 'Generate a location first';
             return;
         }
-        
-        const bounds = this.currentBox.getBounds();
-        const contains = bounds.contains(e.latlng);
-        
-        this.log('Click bounds check', {
-            clickLat: e.latlng.lat,
-            clickLng: e.latlng.lng,
-            bounds: {
-                north: bounds.getNorth(),
-                south: bounds.getSouth(),
-                east: bounds.getEast(),
-                west: bounds.getWest()
-            },
-            contains
-        });
 
-        if (!contains) {
-            document.getElementById('status').textContent = 'Click inside the selected area';
+        const node = this.roadNetwork.findNearestNode(e.latlng.lat, e.latlng.lng);
+        if (!node) {
+            document.getElementById('status').textContent = 'No road found near click';
             return;
         }
 
         try {
-            // Create marker icon with explicit size and anchor
+            // Create marker
             const icon = L.divIcon({
                 className: this.selectMode === 'start' ? 'start-marker' : 'end-marker',
                 html: this.selectMode === 'start' ? '🟢' : '🔴',
                 iconSize: [24, 24],
-                iconAnchor: [12, 12]  // Center the icon on the point
+                iconAnchor: [12, 12]
             });
 
-            // Update appropriate marker
             if (this.selectMode === 'start') {
-                this.log('Setting start marker');
-                if (this.startMarker) {
-                    this.startMarker.remove();
-                }
-                this.startMarker = L.marker(e.latlng, { icon }).addTo(this.map);
+                if (this.startMarker) this.startMarker.remove();
+                this.startMarker = L.marker([node.lat, node.lng], { icon }).addTo(this.map);
                 document.getElementById('status').textContent = 'Start point set';
             } else {
-                this.log('Setting end marker');
-                if (this.endMarker) {
-                    this.endMarker.remove();
-                }
-                this.endMarker = L.marker(e.latlng, { icon }).addTo(this.map);
+                if (this.endMarker) this.endMarker.remove();
+                this.endMarker = L.marker([node.lat, node.lng], { icon }).addTo(this.map);
                 document.getElementById('status').textContent = 'End point set';
             }
 
-            // Update search button state
-            const startSearchBtn = document.getElementById('startSearch');
-            if (startSearchBtn) {
-                startSearchBtn.disabled = !(this.startMarker && this.endMarker);
-                if (this.startMarker && this.endMarker) {
-                    document.getElementById('status').textContent = 'Ready to start pathfinding';
-                }
+            const hasStartAndEnd = this.startMarker && this.endMarker;
+            document.getElementById('startSearch').disabled = !hasStartAndEnd;
+            document.getElementById('clearPoints').disabled = !(this.startMarker || this.endMarker);
+
+            if (hasStartAndEnd) {
+                document.getElementById('status').textContent = 'Ready to start pathfinding';
             }
 
         } catch (error) {
@@ -508,76 +290,96 @@ class USMapPathfinder {
     }
 
     clearPoints() {
-        if (this.startMarker) this.startMarker.remove();
-        if (this.endMarker) this.endMarker.remove();
-        if (this.currentBox) this.currentBox.remove();
-        if (this.gridLayer) this.gridLayer.remove();
-        
-        this.startMarker = null;
-        this.endMarker = null;
-        this.currentBox = null;
-        this.grid = [];
-        
-        document.getElementById('startSearch').disabled = true;
-        document.getElementById('status').textContent = 'Points cleared';
-        document.getElementById('nodesExplored').textContent = 'Nodes explored: 0';
-        document.getElementById('pathLength').textContent = 'Path length: 0.0 mi';
-    }
+        try {
+            // Clear markers and layers
+            if (this.startMarker) this.startMarker.remove();
+            if (this.endMarker) this.endMarker.remove();
+            this.searchLayer.clearLayers();
+            this.pathLayer.clearLayers();
+            
+            this.startMarker = null;
+            this.endMarker = null;
+            
+            // Reset controls state
+            const elements = {
+                startSearch: document.getElementById('startSearch'),
+                clearPoints: document.getElementById('clearPoints'),
+                speedControl: document.getElementById('speedControl'),
+                speedValue: document.getElementById('speedValue'),
+                status: document.getElementById('status'),
+                nodesExplored: document.getElementById('nodesExplored'),
+                pathLength: document.getElementById('pathLength'),
+                estimatedTime: document.getElementById('estimatedTime'),
+                gScore: document.getElementById('gScore'),
+                hScore: document.getElementById('hScore'),
+                fScore: document.getElementById('fScore')
+            };
 
-    getGridPosition(latlng) {
-        if (!this.currentBox || !this.grid.length) return null;
+            // Update controls
+            if (elements.startSearch) elements.startSearch.disabled = true;
+            if (elements.clearPoints) elements.clearPoints.disabled = true;
+            if (elements.speedControl) {
+                elements.speedControl.value = 5; // Reset to default speed
+                elements.speedControl.disabled = !this.roadNetwork.ready;
+            }
 
-        const bounds = this.currentBox.getBounds();
-        const latRange = bounds.getNorth() - bounds.getSouth();
-        const lngRange = bounds.getEast() - bounds.getWest();
+            // Reset display values
+            const displayUpdates = {
+                status: 'Points cleared',
+                nodesExplored: 'Nodes explored: 0',
+                pathLength: 'Path length: 0.0 mi',
+                estimatedTime: 'Est. time: 0 mins',
+                gScore: '0',
+                hScore: '0',
+                fScore: '0',
+                speedValue: 'Normal'
+            };
 
-        const row = Math.floor(((bounds.getNorth() - latlng.lat) / latRange) * GRID_ROWS);
-        const col = Math.floor(((latlng.lng - bounds.getWest()) / lngRange) * GRID_COLS);
+            Object.entries(displayUpdates).forEach(([id, value]) => {
+                if (elements[id]) elements[id].textContent = value;
+            });
 
-        if (row >= 0 && row < GRID_ROWS && col >= 0 && col < GRID_COLS) {
-            return { row, col };
+            // Reset internal state
+            this.searchSpeed = 5;
+            this.pathfinder.setSpeed(this.searchSpeed);
+            this.isSearching = false;
+
+        } catch (error) {
+            this.log('Error in clearPoints:', error);
+            document.getElementById('status').textContent = 'Error clearing points';
         }
-        return null;
     }
 
     async startPathfinding() {
         try {
             if (!this.startMarker || !this.endMarker) {
-                document.getElementById('status').textContent = 'Please select start and end points';
+                document.getElementById('status').textContent = 'Select start and end points first';
                 return;
             }
 
-            const startPos = this.getGridPosition(this.startMarker.getLatLng());
-            const endPos = this.getGridPosition(this.endMarker.getLatLng());
-
-            if (!startPos || !endPos) {
-                document.getElementById('status').textContent = 'Invalid point positions';
-                return;
-            }
-
-            this.log('Starting A* pathfinding', { startPos, endPos });
+            this.searchLayer.clearLayers();
+            this.pathLayer.clearLayers();
             this.isSearching = true;
             document.getElementById('startSearch').disabled = true;
             document.getElementById('pauseSearch').disabled = false;
             document.getElementById('status').textContent = 'Searching for path...';
 
-            const pathfinder = new AStarPathfinder(
-                this.grid,
-                startPos,
-                endPos,
-                (state) => this.visualizeSearch(state)
+            const result = await this.pathfinder.findPath(
+                this.startMarker.getLatLng().lat,
+                this.startMarker.getLatLng().lng,
+                this.endMarker.getLatLng().lat,
+                this.endMarker.getLatLng().lng
             );
 
-            pathfinder.setSpeed(this.searchSpeed);
-            const result = await pathfinder.findPath();
-
-            if (result) {
-                this.visualizePath(result.path);
+            if (result && result.path) {
+                this.visualizeFinalPath(result.path);
                 document.getElementById('status').textContent = 'Path found!';
                 document.getElementById('nodesExplored').textContent = 
                     `Nodes explored: ${result.nodesExplored}`;
                 document.getElementById('pathLength').textContent = 
-                    `Path length: ${this.calculatePathLength(result.path).toFixed(2)} mi`;
+                    `Path length: ${(result.path.totalDistance * 0.000621371).toFixed(2)} mi`;
+                document.getElementById('estimatedTime').textContent = 
+                    `Est. time: ${Math.round(result.path.totalTime)} mins`;
             } else {
                 document.getElementById('status').textContent = 'No path found';
             }
@@ -589,85 +391,55 @@ class USMapPathfinder {
             this.isSearching = false;
             document.getElementById('startSearch').disabled = false;
             document.getElementById('pauseSearch').disabled = true;
-            document.getElementById('pauseSearch').textContent = 'Pause';
         }
     }
 
-    visualizeSearch(state) {
-        const { current, openSet, closedSet, nodesExplored } = state;
-
+    async visualizeSearch(state) {
+        const { current, openSet, closedSet, scores, nodesExplored } = state;
+        
+        // Update metrics
         document.getElementById('nodesExplored').textContent = `Nodes explored: ${nodesExplored}`;
+        document.getElementById('gScore').textContent = (scores.g * 0.000621371).toFixed(2) + ' mi';
+        document.getElementById('hScore').textContent = (scores.h * 0.000621371).toFixed(2) + ' mi';
+        document.getElementById('fScore').textContent = (scores.f * 0.000621371).toFixed(2) + ' mi';
 
-        this.gridLayer.clearLayers();
+        this.searchLayer.clearLayers();
 
-        const bounds = this.currentBox.getBounds();
-        const latStep = (bounds.getNorth() - bounds.getSouth()) / GRID_ROWS;
-        const lngStep = (bounds.getEast() - bounds.getWest()) / GRID_COLS;
+        // Draw open set
+        for (const node of openSet) {
+            this.drawNodeConnections(node, 'road-open');
+        }
 
-        for (let row = 0; row < this.grid.length; row++) {
-            for (let col = 0; col < this.grid[row].length; col++) {
-                const node = this.grid[row][col];
-                const nodeBounds = [
-                    [node.lat, node.lng],
-                    [node.lat + latStep, node.lng + lngStep]
-                ];
+        // Draw closed set
+        for (const node of closedSet) {
+            this.drawNodeConnections(node, 'road-closed');
+        }
 
-                let color = 'transparent';
-                let opacity = 0;
+        // Draw current node
+        if (current) {
+            this.drawNodeConnections(current, 'road-current');
+        }
+    }
 
-                if (closedSet.includes(node)) {
-                    color = '#9C27B0';
-                    opacity = 0.3;
-                } else if (openSet.includes(node)) {
-                    color = '#2196F3';
-                    opacity = 0.3;
-                }
-
-                if (node === current) {
-                    color = '#FFC107';
-                    opacity = 0.5;
-                }
-
-                L.rectangle(nodeBounds, {
-                    color: '#fff',
-                    weight: 1,
-                    fillColor: color,
-                    fillOpacity: opacity,
-                    opacity: 0.2
-                }).addTo(this.gridLayer);
+    drawNodeConnections(node, className) {
+        for (const [neighborId, edge] of node.connections) {
+            if (edge.path.length >= 2) {
+                L.polyline(edge.path, {
+                    className: `road ${className}`,
+                    weight: this.getRoadWeight(edge.roadType)
+                }).addTo(this.searchLayer);
             }
         }
     }
 
-    visualizePath(path) {
-        const pathCoords = path.map(node => [node.lat, node.lng]);
-        L.polyline(pathCoords, {
-            color: '#4CAF50',
-            weight: 4,
-            opacity: 0.8
-        }).addTo(this.gridLayer);
-    }
-
-    calculatePathLength(path) {
-        let length = 0;
-        for (let i = 1; i < path.length; i++) {
-            const node1 = path[i - 1];
-            const node2 = path[i];
-            
-            const R = 3959; // Earth's radius in miles
-            const lat1 = node1.lat * Math.PI / 180;
-            const lat2 = node2.lat * Math.PI / 180;
-            const dLat = (node2.lat - node1.lat) * Math.PI / 180;
-            const dLon = (node2.lng - node1.lng) * Math.PI / 180;
-
-            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                     Math.cos(lat1) * Math.cos(lat2) *
-                     Math.sin(dLon/2) * Math.sin(dLon/2);
-            
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            length += R * c;
+    visualizeFinalPath(pathResult) {
+        // Draw the final path segments
+        for (const segment of pathResult.segments) {
+            L.polyline(segment.points, {
+                className: 'road road-path',
+                weight: this.getRoadWeight(segment.edge.roadType)
+            }).addTo(this.pathLayer);
         }
-        return length;
     }
 
     togglePause() {
@@ -675,18 +447,19 @@ class USMapPathfinder {
         if (this.isSearching) {
             button.textContent = 'Resume';
             this.isSearching = false;
+            this.pathfinder.setPaused(true);
         } else {
             button.textContent = 'Pause';
             this.isSearching = true;
+            this.pathfinder.setPaused(false);
         }
     }
 }
 
 // Initialize the application
-console.log('Starting application initialization...');
 window.addEventListener('load', () => {
     try {
-        new USMapPathfinder();
+        new PathfindingVisualizer();
     } catch (error) {
         console.error('Failed to start application:', error);
         document.getElementById('status').textContent = 'Failed to start application';
