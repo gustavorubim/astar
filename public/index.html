@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>US Map Display</title>
+    <title>A* Pathfinding on US Map</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
@@ -12,15 +12,34 @@
 </head>
 <body>
     <div id="controls">
-        <button id="randomLocation" disabled>Random US Location</button>
-        <div id="status">Initializing map...</div>
+        <div class="control-group">
+            <button id="randomLocation" disabled>Random US Location</button>
+            <button id="clearPoints" disabled>Clear Points</button>
+        </div>
+        <div class="control-group">
+            <select id="selectMode" disabled>
+                <option value="start">Select Start Point</option>
+                <option value="end">Select End Point</option>
+            </select>
+            <button id="startSearch" disabled>Start A* Search</button>
+        </div>
+        <div class="control-group">
+            <label>Animation Speed:</label>
+            <input type="range" id="speedControl" min="1" max="10" value="5" disabled>
+            <button id="pauseSearch" disabled>Pause</button>
+        </div>
+    </div>
+    <div id="metrics">
+        <span id="nodesExplored">Nodes explored: 0</span>
+        <span id="pathLength">Path length: 0.0 mi</span>
     </div>
     <div id="map-container"></div>
+    <div id="status">Initializing map...</div>
     
-    <!-- Leaflet JS -->
+    <!-- Scripts -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
             crossorigin="anonymous"></script>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>
