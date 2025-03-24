@@ -58,12 +58,25 @@ class RoadNetwork {
         this.nodes = new Map(); // id -> RoadNode
         this.edges = new Map(); // id -> RoadEdge
         this.bounds = null;
+        this.lastSuccessBounds = null;
         this.ready = false;
+        this.loading = false;
+        this.spatialIndex = null;
+        this.nodeLocations = [];
+        this.searchRadius = 100; // meters
+        this.loadProgress = 0;
     }
 
     async fetchRoadData(bounds) {
-        this.bounds = bounds;
+        if (this.loading) {
+            console.warn('Road data fetch already in progress');
+            return false;
+        }
+
+        this.loading = true;
+        this.loadProgress = 0;
         this.ready = false;
+        this.bounds = bounds;
         
         const maxRetries = 3;
         let retryCount = 0;
@@ -93,6 +106,7 @@ class RoadNetwork {
                 }
 
                 const data = await response.json();
+                this.loadProgress = 50;
                 
                 // Validate response data
                 if (!data || !data.elements || !Array.isArray(data.elements)) {
@@ -101,6 +115,8 @@ class RoadNetwork {
 
                 // Process the data
                 await this.processOsmData(data);
+                this.lastSuccessBounds = bounds;
+                this.loading = false;
                 console.log('Road data fetched and processed successfully');
                 return true;
 
@@ -120,6 +136,7 @@ class RoadNetwork {
                 if (retryCount === maxRetries) {
                     console.error('Max retries reached, giving up');
                     this.ready = false;
+                    this.loading = false;
                     throw new Error(`Failed to fetch road data after ${maxRetries} attempts: ${lastError.message}`);
                 }
                 
@@ -128,6 +145,7 @@ class RoadNetwork {
             }
         }
 
+        this.loading = false;
         return false;
     }
 
@@ -142,13 +160,15 @@ class RoadNetwork {
         out body;`;
     }
 
-    processOsmData(data) {
+    async processOsmData(data) {
         console.log('Processing OSM data...');
         
         // Reset state
         this.ready = false;
         this.nodes.clear();
         this.edges.clear();
+        this.spatialIndex = null;
+        this.nodeLocations = [];
 
         try {
             // Validate data
@@ -173,6 +193,7 @@ class RoadNetwork {
                 nodes.set(node.id, [node.lat, node.lon]);
             });
 
+            this.loadProgress = 60;
             console.log(`Processed ${nodes.size} nodes`);
 
             // Process ways (roads)
@@ -255,20 +276,53 @@ class RoadNetwork {
                 }
             });
 
+            this.loadProgress = 80;
+
+            // Build spatial index for faster node searches
+            console.log('Building spatial index...');
+            this.buildSpatialIndex();
+
             // Validate final network state
             if (this.nodes.size === 0 || this.edges.size === 0) {
                 throw new Error('Failed to build road network - no nodes or edges created');
             }
 
+            this.loadProgress = 100;
             console.log(`Network built with ${this.nodes.size} nodes and ${this.edges.size} edges`);
+            
+            // Set ready flag only after all validations pass
             this.ready = true;
 
         } catch (error) {
             console.error('Error processing OSM data:', error);
             this.nodes.clear();
             this.edges.clear();
+            this.spatialIndex = null;
+            this.nodeLocations = [];
+            this.bounds = null;
             throw error;
         }
+    }
+
+    buildSpatialIndex() {
+        const points = [];
+        this.nodeLocations = [];
+        
+        // Prepare points for indexing
+        let i = 0;
+        for (const node of this.nodes.values()) {
+            points.push({
+                x: node.lng,
+                y: node.lat,
+                id: node.id
+            });
+            this.nodeLocations.push(node);
+            i++;
+        }
+
+        // Create KDBush index
+        this.spatialIndex = new KDBush(points, p => p.x, p => p.y);
+        console.log('Spatial index built successfully');
     }
 
     calculateDistance(lat1, lon1, lat2, lon2) {
@@ -288,35 +342,59 @@ class RoadNetwork {
     }
 
     findNearestNode(lat, lng) {
-        let nearestNode = null;
-        let minDistance = Infinity;
-        const MAX_DISTANCE = 100; // Maximum 100 meters from click to consider a node
-
         // Debug logging
         console.log(`Finding nearest node to [${lat}, ${lng}]`);
-        console.log(`Total nodes in network: ${this.nodes.size}`);
-
-        if (!this.ready || this.nodes.size === 0) {
-            console.warn('Road network not ready or empty');
+        
+        if (!this.ready) {
+            console.warn('Road network not ready');
             return null;
         }
 
-        for (const node of this.nodes.values()) {
+        if (this.loading) {
+            console.warn('Search blocked - network loading in progress');
+            return null;
+        }
+
+        if (!this.spatialIndex) {
+            console.warn('Spatial index not built');
+            return null;
+        }
+
+        // Convert search radius from meters to degrees (approximate)
+        const radiusInDegrees = this.searchRadius / 111000; // 111km per degree
+
+        // Use spatial index to find nearest nodes
+        const nearestIndices = this.spatialIndex.within(lng, lat, radiusInDegrees);
+        
+        if (nearestIndices.length === 0) {
+            console.log(`No nodes found within ${this.searchRadius}m`);
+            return null;
+        }
+
+        // Find the closest node among candidates
+        let nearestNode = null;
+        let minDistance = Infinity;
+
+        for (const idx of nearestIndices) {
+            const node = this.nodes.get(this.nodeLocations[idx].id);
             const distance = this.calculateDistance(lat, lng, node.lat, node.lng);
+            
             if (distance < minDistance) {
                 minDistance = distance;
                 nearestNode = node;
             }
         }
 
-        // Only return the node if it's within the maximum distance
-        if (minDistance <= MAX_DISTANCE) {
+        if (nearestNode) {
             console.log(`Found nearest node: [${nearestNode.lat}, ${nearestNode.lng}] at distance: ${minDistance}m`);
             return nearestNode;
-        } else {
-            console.log(`Nearest node too far: ${minDistance}m > ${MAX_DISTANCE}m`);
-            return null;
         }
+
+        return null;
+    }
+
+    getLoadProgress() {
+        return this.loadProgress;
     }
 
     resetNodes() {

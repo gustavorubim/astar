@@ -14,7 +14,8 @@ class PathfindingVisualizer {
         this.searchSpeed = 5;
         this.nodesExplored = 0;
         this.lastLoadedBounds = null;
-        this.loadingRoads = false;
+        this.loadingBox = null;
+        this.progressBar = null;
 
         // US boundary box for initial view
         this.usBounds = {
@@ -105,9 +106,54 @@ class PathfindingVisualizer {
     }
 
     async loadRoadsInView(bounds) {
+        if (this.roadNetwork.loading) {
+            this.log('Already loading roads, skipping request');
+            return;
+        }
+
         try {
+            // Add loading indicator to map
+            if (this.loadingBox) {
+                this.loadingBox.remove();
+            }
+            this.loadingBox = L.rectangle(bounds, {
+                color: '#fff',
+                weight: 1,
+                fillColor: '#000',
+                fillOpacity: 0.1,
+                dashArray: '5,10'
+            }).addTo(this.map);
+
+            // Add progress bar
+            if (!this.progressBar) {
+                this.progressBar = L.control({ position: 'bottomright' });
+                this.progressBar.onAdd = () => {
+                    const div = L.DomUtil.create('div', 'progress-bar');
+                    div.innerHTML = '<div class="progress-fill"></div>';
+                    return div;
+                };
+                this.progressBar.addTo(this.map);
+            }
+
             document.getElementById('status').textContent = 'Loading roads...';
+
+            // Check bounds size to prevent loading too large an area
+            const latSpan = bounds.getNorth() - bounds.getSouth();
+            const lngSpan = bounds.getEast() - bounds.getWest();
             
+            if (latSpan > 0.1 || lngSpan > 0.1) { // Roughly 11km
+                throw new Error('Area too large - Please zoom in further');
+            }
+
+            // Start progress updates
+            const progressInterval = setInterval(() => {
+                const progress = this.roadNetwork.getLoadProgress();
+                const fill = document.querySelector('.progress-fill');
+                if (fill) {
+                    fill.style.width = `${progress}%`;
+                }
+            }, 100);
+
             const success = await this.roadNetwork.fetchRoadData({
                 south: bounds.getSouth(),
                 north: bounds.getNorth(),
@@ -115,15 +161,33 @@ class PathfindingVisualizer {
                 east: bounds.getEast()
             });
 
+            clearInterval(progressInterval);
+
             if (success) {
                 this.visualizeRoadNetwork();
-                document.getElementById('status').textContent = 'Click near roads to set start/end points';
+                document.getElementById('status').textContent = 'Roads loaded - Click near roads to set points';
+                
+                // Store successfully loaded bounds
+                this.lastLoadedBounds = bounds;
             } else {
-                document.getElementById('status').textContent = 'Failed to load roads - Try a different area';
+                document.getElementById('status').textContent = 'No roads found - Try a different area';
             }
+
         } catch (error) {
             this.log('Error loading roads:', error);
-            document.getElementById('status').textContent = 'Error loading roads: ' + error.message;
+            document.getElementById('status').textContent = 'Error: ' + error.message;
+            this.roadLayer.clearLayers();
+            
+        } finally {
+            // Clean up UI elements
+            if (this.loadingBox) {
+                this.loadingBox.remove();
+                this.loadingBox = null;
+            }
+            if (this.progressBar) {
+                this.map.removeControl(this.progressBar);
+                this.progressBar = null;
+            }
         }
     }
 
@@ -144,7 +208,12 @@ class PathfindingVisualizer {
             elements.clearPoints.addEventListener('click', () => this.clearPoints());
             elements.startSearch.addEventListener('click', () => this.startPathfinding());
             elements.pauseSearch.addEventListener('click', () => this.togglePause());
-            elements.selectMode.addEventListener('change', (e) => this.selectMode = e.target.value);
+            elements.selectMode.addEventListener('change', (e) => {
+                this.selectMode = e.target.value;
+                // Update status message based on current selection mode
+                document.getElementById('status').textContent = 
+                    this.selectMode === 'start' ? 'Click to set start point' : 'Click to set end point';
+            });
             
             // Speed control with visual feedback
             elements.speedControl.addEventListener('input', (e) => {
@@ -261,9 +330,20 @@ class PathfindingVisualizer {
     }
 
     handleMapClick(e) {
+        if (!this.map) {
+            this.log('Error: Map not initialized');
+            document.getElementById('status').textContent = 'Error: Map not initialized';
+            return;
+        }
+
         const zoom = this.map.getZoom();
         if (zoom < 15) {
-            document.getElementById('status').textContent = 'Zoom in further to select points (Level 15+)';
+            document.getElementById('status').textContent = 'Zoom in further to select points (current: ' + zoom + ', needed: 15+)';
+            return;
+        }
+
+        if (this.roadNetwork.loading) {
+            document.getElementById('status').textContent = 'Please wait, roads are still loading...';
             return;
         }
 
@@ -271,17 +351,9 @@ class PathfindingVisualizer {
         this.log('Map clicked:', clickLocation);
 
         try {
-            // Load roads if not loaded for this area
-            if (!this.roadNetwork.ready) {
-                const bounds = this.map.getBounds();
-                this.loadRoadsInView(bounds);
-                document.getElementById('status').textContent = 'Loading roads, please wait and try again';
-                return;
-            }
-
             // Show click location temporarily
             const clickMarker = L.circle([clickLocation.lat, clickLocation.lng], {
-                radius: 2,
+                radius: 5,
                 color: '#fff',
                 fillColor: '#fff',
                 fillOpacity: 1,
@@ -290,13 +362,35 @@ class PathfindingVisualizer {
             
             setTimeout(() => clickMarker.remove(), 1000);
 
-            // Find nearest node
+            // Validate road network state
+            if (!this.roadNetwork.ready || this.roadNetwork.nodes.size === 0) {
+                this.log('Loading roads for clicked area');
+                const bounds = this.map.getBounds();
+                this.loadRoadsInView(bounds);
+                document.getElementById('status').textContent = 'Loading roads, please wait and try clicking again...';
+                return;
+            }
+
+            // Find nearest node with debug logging
+            this.log('Finding nearest node to:', clickLocation);
             const node = this.roadNetwork.findNearestNode(clickLocation.lat, clickLocation.lng);
             
             if (!node) {
                 document.getElementById('status').textContent = 'No road found within 100m of click. Try clicking closer to a road.';
+                // Show a temporary "no road found" indicator
+                const noRoadMarker = L.circle([clickLocation.lat, clickLocation.lng], {
+                    radius: 100,
+                    color: '#ff0000',
+                    fillColor: '#ff0000',
+                    fillOpacity: 0.1,
+                    weight: 1,
+                    dashArray: '4'
+                }).addTo(this.map);
+                setTimeout(() => noRoadMarker.remove(), 2000);
                 return;
             }
+
+            this.log('Found nearest node:', node);
 
             // Show line from click to nearest node
             const snapLine = L.polyline([[clickLocation.lat, clickLocation.lng], [node.lat, node.lng]], {
@@ -306,7 +400,7 @@ class PathfindingVisualizer {
                 opacity: 0.6
             }).addTo(this.map);
             
-            setTimeout(() => snapLine.remove(), 1000);
+            setTimeout(() => snapLine.remove(), 1500);
 
             // Create marker
             const icon = L.divIcon({
@@ -318,19 +412,35 @@ class PathfindingVisualizer {
 
             // Update markers
             if (this.selectMode === 'start') {
-                if (this.startMarker) this.startMarker.remove();
-                this.startMarker = L.marker([node.lat, node.lng], { icon }).addTo(this.map);
-                document.getElementById('status').textContent = 'Start point set';
+                if (this.startMarker) {
+                    this.startMarker.remove();
+                }
+                this.startMarker = L.marker([node.lat, node.lng], { icon })
+                    .addTo(this.map)
+                    .bindTooltip('Start Point');
+                document.getElementById('status').textContent = 'Start point set - Now select an end point';
+                document.getElementById('selectMode').value = 'end';
+                this.selectMode = 'end';  // Update internal state
             } else {
-                if (this.endMarker) this.endMarker.remove();
-                this.endMarker = L.marker([node.lat, node.lng], { icon }).addTo(this.map);
+                if (this.endMarker) {
+                    this.endMarker.remove();
+                }
+                this.endMarker = L.marker([node.lat, node.lng], { icon })
+                    .addTo(this.map)
+                    .bindTooltip('End Point');
                 document.getElementById('status').textContent = 'End point set';
+                // Don't auto-switch back to start mode
             }
 
             // Update control states
             const hasStartAndEnd = this.startMarker && this.endMarker;
-            document.getElementById('startSearch').disabled = !hasStartAndEnd;
-            document.getElementById('clearPoints').disabled = !(this.startMarker || this.endMarker);
+            const controls = {
+                startSearch: document.getElementById('startSearch'),
+                clearPoints: document.getElementById('clearPoints')
+            };
+
+            if (controls.startSearch) controls.startSearch.disabled = !hasStartAndEnd;
+            if (controls.clearPoints) controls.clearPoints.disabled = !(this.startMarker || this.endMarker);
             
             if (hasStartAndEnd) {
                 document.getElementById('status').textContent = 'Ready to start pathfinding! Click Find Path to begin.';
@@ -378,7 +488,7 @@ class PathfindingVisualizer {
 
             // Reset display values
             const displayUpdates = {
-                status: 'Points cleared',
+                status: 'Points cleared - Select a new start point',
                 nodesExplored: 'Nodes explored: 0',
                 pathLength: 'Path length: 0.0 mi',
                 estimatedTime: 'Est. time: 0 mins',
@@ -396,6 +506,8 @@ class PathfindingVisualizer {
             this.searchSpeed = 5;
             this.pathfinder.setSpeed(this.searchSpeed);
             this.isSearching = false;
+            this.selectMode = 'start';
+            document.getElementById('selectMode').value = 'start';
 
         } catch (error) {
             this.log('Error in clearPoints:', error);

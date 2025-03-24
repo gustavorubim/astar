@@ -4,13 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>A* Pathfinding on Real Roads</title>
-    <!-- Leaflet CSS -->
+    <!-- Leaflet and Plugin CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
           crossorigin="anonymous" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet.locatecontrol@0.79.0/dist/L.Control.Locate.min.css" />
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div id="map-container"></div>
+
     <div id="controls">
         <div class="control-group">
             <select id="selectMode">
@@ -38,9 +41,9 @@
         </ol>
         <p class="tip">💡 Zoom in to see more road details</p>
     </div>
-    
+
     <div id="metrics">
-        <span id="searchStatus">Status: Initializing...</span>
+        <span id="status">Status: Initializing...</span>
         <span id="nodesExplored">Nodes explored: 0</span>
         <span id="pathLength">Path length: 0.0 mi</span>
         <span id="estimatedTime">Est. time: 0 mins</span>
@@ -70,13 +73,12 @@
         </div>
     </div>
 
-    <div id="map-container"></div>
-    <div id="status">Initializing map...</div>
-    
     <!-- Scripts -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
             crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet.locatecontrol@0.79.0/dist/L.Control.Locate.min.js"></script>
+    <script src="https://unpkg.com/kdbush@3.0.0/kdbush.min.js"></script>
     <script src="road_network.js"></script>
     <script src="pathfinder.js"></script>
     <script src="app.js"></script>

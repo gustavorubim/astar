@@ -1,3 +1,4 @@
+/* Base styles */
 * {
     margin: 0;
     padding: 0;
@@ -13,8 +14,23 @@ body {
     flex-direction: column;
     align-items: center;
     padding: 10px;
+    position: relative;
 }
 
+/* Map Container */
+#map-container {
+    width: 100%;
+    max-width: 1200px;
+    height: 700px;
+    background-color: #2a2a2a;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    position: relative;
+    z-index: 1;
+}
+
+/* Controls */
 #controls {
     width: 100%;
     max-width: 1200px;
@@ -26,8 +42,8 @@ body {
     padding: 12px;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    z-index: 1000;
     position: relative;
+    z-index: 2;
 }
 
 .control-group {
@@ -40,6 +56,7 @@ body {
     flex-wrap: wrap;
 }
 
+/* Help Panel */
 #help-panel {
     position: absolute;
     top: 20px;
@@ -79,6 +96,30 @@ body {
     color: #ddd;
 }
 
+/* Progress Bar */
+.progress-bar {
+    width: 200px;
+    height: 4px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 2px;
+    overflow: hidden;
+    position: absolute;
+    bottom: 40px;
+    right: 10px;
+    z-index: 1000;
+}
+
+.progress-fill {
+    height: 100%;
+    background-color: #4CAF50;
+    width: 0%;
+    transition: width 0.3s ease;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+/* Buttons */
 button {
     background-color: #4CAF50;
     color: white;
@@ -119,6 +160,7 @@ button:disabled {
     background-color: #d32f2f;
 }
 
+/* Form Controls */
 select, input[type="range"] {
     padding: 5px;
     border-radius: 4px;
@@ -139,11 +181,6 @@ select:hover:not(:disabled) {
     border-color: #666;
 }
 
-#areaSize {
-    min-width: 180px;
-    margin-left: 10px;
-}
-
 input[type="range"] {
     width: 150px;
     margin: 0 10px;
@@ -155,6 +192,7 @@ select:disabled, input[type="range"]:disabled {
     cursor: not-allowed;
 }
 
+/* Labels and Values */
 label {
     font-size: 14px;
     color: #ddd;
@@ -173,10 +211,11 @@ label {
     margin-right: 10px;
 }
 
+/* Metrics Panel */
 #metrics {
     width: 100%;
     max-width: 1200px;
-    margin-bottom: 20px;
+    margin: 10px 0;
     display: flex;
     justify-content: space-around;
     background-color: #2a2a2a;
@@ -185,6 +224,8 @@ label {
     font-size: 14px;
     flex-wrap: wrap;
     gap: 10px;
+    position: relative;
+    z-index: 2;
 }
 
 #metrics span {
@@ -197,14 +238,17 @@ label {
     min-width: 200px;
 }
 
+/* Algorithm Info */
 #algorithm-info {
     width: 100%;
     max-width: 1200px;
-    margin-bottom: 20px;
+    margin: 10px 0;
     display: flex;
     gap: 20px;
     justify-content: center;
     flex-wrap: wrap;
+    position: relative;
+    z-index: 2;
 }
 
 .info-panel {
@@ -228,6 +272,7 @@ label {
     font-size: 14px;
 }
 
+/* Legend */
 .legend-item {
     display: flex;
     align-items: center;
@@ -260,6 +305,7 @@ label {
     background-color: rgba(76, 175, 80, 0.7);
 }
 
+/* Status Bar */
 #status {
     width: 100%;
     max-width: 1200px;
@@ -269,22 +315,15 @@ label {
     border-radius: 4px;
     font-size: 14px;
     color: #ddd;
-    margin-bottom: 20px;
+    margin: 10px 0;
+    position: relative;
+    z-index: 2;
 }
 
-#map-container {
-    width: 100%;
-    max-width: 1200px;
-    height: 700px;
-    background-color: #2a2a2a;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-/* Map Customization */
+/* Leaflet Customization */
 .leaflet-container {
     background-color: #2a2a2a !important;
+    z-index: 1;
 }
 
 .leaflet-tile {
@@ -300,10 +339,11 @@ label {
     color: #4CAF50 !important;
 }
 
-/* Road Network Styles */
+/* Road Network Visualization */
 .road {
     stroke-linecap: round;
     stroke-linejoin: round;
+    transition: stroke-width 0.3s ease;
 }
 
 .road-highway {
@@ -324,14 +364,17 @@ label {
 
 .road-open {
     stroke: rgba(33, 150, 243, 0.7);
+    transition: stroke 0.3s ease;
 }
 
 .road-closed {
     stroke: rgba(156, 39, 176, 0.7);
+    transition: stroke 0.3s ease;
 }
 
 .road-current {
     stroke: rgba(255, 193, 7, 0.9);
+    transition: stroke 0.3s ease;
 }
 
 .road-path {
@@ -349,17 +392,83 @@ label {
     }
 }
 
-/* Start/End Markers */
+/* Markers */
 .start-marker {
     color: #4CAF50;
     font-size: 24px;
     filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
+    transition: transform 0.3s ease;
 }
 
 .end-marker {
     color: #f44336;
     font-size: 24px;
     filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.5));
+    transition: transform 0.3s ease;
+}
+
+.marker-pulse {
+    animation: marker-pulse 0.5s ease-out;
+}
+
+@keyframes marker-pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* Loading States */
+.loading-box {
+    border: 2px dashed #fff;
+    opacity: 0.5;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 0.3;
+    }
+    50% {
+        opacity: 0.6;
+    }
+    100% {
+        opacity: 0.3;
+    }
+}
+
+/* Network State Indicators */
+.network-loading {
+    background-color: rgba(33, 150, 243, 0.2);
+    border: 2px dashed rgba(33, 150, 243, 0.5);
+    animation: loading-pulse 1.5s infinite;
+}
+
+.network-ready {
+    background-color: rgba(76, 175, 80, 0.2);
+    border: 2px solid rgba(76, 175, 80, 0.5);
+}
+
+.network-error {
+    background-color: rgba(244, 67, 54, 0.2);
+    border: 2px solid rgba(244, 67, 54, 0.5);
+}
+
+@keyframes loading-pulse {
+    0% {
+        border-color: rgba(33, 150, 243, 0.3);
+    }
+    50% {
+        border-color: rgba(33, 150, 243, 0.8);
+    }
+    100% {
+        border-color: rgba(33, 150, 243, 0.3);
+    }
 }
 
 /* Responsive Design */
@@ -393,5 +502,11 @@ label {
 
     body {
         padding: 10px;
+    }
+
+    .progress-bar {
+        width: 150px;
+        bottom: 20px;
+        right: 5px;
     }
 }
