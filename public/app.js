@@ -13,8 +13,10 @@ class PathfindingVisualizer {
         this.isSearching = false;
         this.searchSpeed = 5;
         this.nodesExplored = 0;
+        this.lastLoadedBounds = null;
+        this.loadingRoads = false;
 
-        // US boundary box
+        // US boundary box for initial view
         this.usBounds = {
             north: 49.384358,
             south: 24.396308,
@@ -53,6 +55,17 @@ class PathfindingVisualizer {
                 maxZoom: 18
             }).addTo(this.map);
 
+            // Add scale control
+            L.control.scale().addTo(this.map);
+
+            // Add location control
+            L.control.locate({
+                position: 'topleft',
+                locateOptions: {
+                    maxZoom: 16
+                }
+            }).addTo(this.map);
+
             // Create layers
             this.roadLayer = L.layerGroup().addTo(this.map);
             this.searchLayer = L.layerGroup().addTo(this.map);
@@ -61,10 +74,17 @@ class PathfindingVisualizer {
             this.setupEventListeners();
             this.pathfinder.setVisualizationCallback((state) => this.visualizeSearch(state));
 
+            // Setup map move handler with debounce
+            let moveTimeout;
+            this.map.on('moveend', () => {
+                clearTimeout(moveTimeout);
+                moveTimeout = setTimeout(() => this.handleMapMoveEnd(), 500);
+            });
+
             this.map.whenReady(() => {
                 this.log('Map is ready');
                 this.enableControls();
-                document.getElementById('status').textContent = 'Map ready - Click Random US Location';
+                document.getElementById('status').textContent = 'Zoom in to an area to load roads';
             });
 
         } catch (error) {
@@ -73,23 +93,54 @@ class PathfindingVisualizer {
         }
     }
 
+    handleMapMoveEnd() {
+        const zoom = this.map.getZoom();
+        if (zoom >= 15) { // Only load roads at sufficient zoom level
+            const bounds = this.map.getBounds();
+            this.loadRoadsInView(bounds);
+        } else {
+            this.roadLayer.clearLayers();
+            document.getElementById('status').textContent = 'Zoom in further to see roads';
+        }
+    }
+
+    async loadRoadsInView(bounds) {
+        try {
+            document.getElementById('status').textContent = 'Loading roads...';
+            
+            const success = await this.roadNetwork.fetchRoadData({
+                south: bounds.getSouth(),
+                north: bounds.getNorth(),
+                west: bounds.getWest(),
+                east: bounds.getEast()
+            });
+
+            if (success) {
+                this.visualizeRoadNetwork();
+                document.getElementById('status').textContent = 'Click near roads to set start/end points';
+            } else {
+                document.getElementById('status').textContent = 'Failed to load roads - Try a different area';
+            }
+        } catch (error) {
+            this.log('Error loading roads:', error);
+            document.getElementById('status').textContent = 'Error loading roads: ' + error.message;
+        }
+    }
+
     setupEventListeners() {
         try {
             const elements = {
-                randomLocation: document.getElementById('randomLocation'),
                 clearPoints: document.getElementById('clearPoints'),
                 startSearch: document.getElementById('startSearch'),
                 pauseSearch: document.getElementById('pauseSearch'),
                 selectMode: document.getElementById('selectMode'),
-                speedControl: document.getElementById('speedControl'),
-                areaSize: document.getElementById('areaSize')
+                speedControl: document.getElementById('speedControl')
             };
 
             if (!Object.values(elements).every(el => el)) {
                 throw new Error('Required DOM elements not found');
             }
 
-            elements.randomLocation.addEventListener('click', () => this.generateRandomLocation());
             elements.clearPoints.addEventListener('click', () => this.clearPoints());
             elements.startSearch.addEventListener('click', () => this.startPathfinding());
             elements.pauseSearch.addEventListener('click', () => this.togglePause());
@@ -102,15 +153,25 @@ class PathfindingVisualizer {
                 this.updateSpeedDisplay();
             });
 
-            // Area size selection
-            elements.areaSize.addEventListener('change', (e) => {
-                this.log('Area size changed:', e.target.value);
-                if (this.roadNetwork.ready) {
-                    this.generateRandomLocation();
+            // Map click handler
+            this.map.on('click', (e) => this.handleMapClick(e));
+            
+            // Show/hide help panel based on zoom level
+            this.map.on('zoomend', () => {
+                const helpPanel = document.getElementById('help-panel');
+                if (helpPanel) {
+                    helpPanel.style.display = this.map.getZoom() < 15 ? 'block' : 'none';
+                }
+                
+                // Update status message based on zoom level
+                const status = document.getElementById('status');
+                if (status) {
+                    status.textContent = this.map.getZoom() < 15
+                        ? 'Zoom in further to see roads and select points'
+                        : 'Click near roads to set start/end points';
                 }
             });
 
-            this.map.on('click', (e) => this.handleMapClick(e));
             this.log('Event listeners set up successfully');
 
         } catch (error) {
@@ -149,9 +210,8 @@ class PathfindingVisualizer {
     }
 
     enableControls() {
-        const controls = [
-            'randomLocation', 'selectMode', 'areaSize', 'speedControl'
-        ];
+        // Enable controls that should be available from the start
+        const controls = ['selectMode', 'speedControl'];
         controls.forEach(id => {
             const element = document.getElementById(id);
             if (element) {
@@ -161,53 +221,9 @@ class PathfindingVisualizer {
                 }
             }
         });
-    }
 
-    async generateRandomLocation() {
-        try {
-            this.log('Generating random location...');
-            this.clearPoints();
-            
-            const lat = Math.random() * (this.usBounds.north - this.usBounds.south) + this.usBounds.south;
-            const lng = Math.random() * (this.usBounds.east - this.usBounds.west) + this.usBounds.west;
-            
-            // Get area size from selector
-            const boxSize = this.getAreaSize();
-            
-            // Adjust for longitude distortion based on latitude
-            const lngScale = Math.cos(lat * Math.PI / 180);
-            const bounds = {
-                south: lat - boxSize,
-                north: lat + boxSize,
-                west: lng - boxSize / lngScale,
-                east: lng + boxSize / lngScale
-            };
-
-            document.getElementById('status').textContent = 'Fetching road data...';
-            const success = await this.roadNetwork.fetchRoadData(bounds);
-            
-            if (success) {
-                this.visualizeRoadNetwork();
-                this.map.fitBounds([
-                    [bounds.south, bounds.west],
-                    [bounds.north, bounds.east]
-                ], { padding: [50, 50] });
-                
-                // Enable speed control and update display
-                document.getElementById('speedControl').disabled = false;
-                this.updateSpeedDisplay();
-                
-                document.getElementById('status').textContent =
-                    'Road network loaded - Select start and end points';
-            } else {
-                document.getElementById('status').textContent =
-                    'Failed to load road data - Try a different location';
-            }
-
-        } catch (error) {
-            this.log('Error generating location:', error);
-            document.getElementById('status').textContent = 'Error loading location: ' + error.message;
-        }
+        // Show initial help text
+        document.getElementById('status').textContent = 'Zoom in to an area to see roads';
     }
 
     visualizeRoadNetwork() {
@@ -245,8 +261,9 @@ class PathfindingVisualizer {
     }
 
     handleMapClick(e) {
-        if (!this.roadNetwork.ready) {
-            document.getElementById('status').textContent = 'Please generate a location first';
+        const zoom = this.map.getZoom();
+        if (zoom < 15) {
+            document.getElementById('status').textContent = 'Zoom in further to select points (Level 15+)';
             return;
         }
 
@@ -254,6 +271,14 @@ class PathfindingVisualizer {
         this.log('Map clicked:', clickLocation);
 
         try {
+            // Load roads if not loaded for this area
+            if (!this.roadNetwork.ready) {
+                const bounds = this.map.getBounds();
+                this.loadRoadsInView(bounds);
+                document.getElementById('status').textContent = 'Loading roads, please wait and try again';
+                return;
+            }
+
             // Show click location temporarily
             const clickMarker = L.circle([clickLocation.lat, clickLocation.lng], {
                 radius: 2,

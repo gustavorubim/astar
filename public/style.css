@@ -12,30 +12,71 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 20px;
+    padding: 10px;
 }
 
 #controls {
     width: 100%;
     max-width: 1200px;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
     display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 20px;
+    flex-direction: column;
+    gap: 10px;
     background-color: #2a2a2a;
-    padding: 15px;
+    padding: 12px;
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    position: relative;
 }
 
 .control-group {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 5px 15px;
+    gap: 8px;
+    padding: 8px 12px;
     background-color: #333;
     border-radius: 4px;
+    flex-wrap: wrap;
+}
+
+#help-panel {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background-color: rgba(42, 42, 42, 0.9);
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    max-width: 300px;
+    backdrop-filter: blur(5px);
+}
+
+#help-panel h3 {
+    margin: 0 0 10px 0;
+    color: #4CAF50;
+    font-size: 16px;
+}
+
+#help-panel ol {
+    margin: 0;
+    padding-left: 20px;
+}
+
+#help-panel li {
+    margin: 5px 0;
+    color: #ddd;
+    font-size: 14px;
+}
+
+#help-panel .tip {
+    margin: 10px 0 0 0;
+    padding: 8px;
+    background-color: rgba(76, 175, 80, 0.1);
+    border-left: 3px solid #4CAF50;
+    font-size: 14px;
+    color: #ddd;
 }
 
 button {

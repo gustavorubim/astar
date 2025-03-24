@@ -13,27 +13,30 @@
 <body>
     <div id="controls">
         <div class="control-group">
-            <button id="randomLocation" disabled>Random US Location</button>
-            <select id="areaSize" disabled>
-                <option value="small">Small Area (1km²)</option>
-                <option value="medium" selected>Medium Area (4km²)</option>
-                <option value="large">Large Area (9km²)</option>
+            <select id="selectMode">
+                <option value="start">🟢 Set Start Point</option>
+                <option value="end">🔴 Set End Point</option>
             </select>
             <button id="clearPoints" disabled>Clear Points</button>
-        </div>
-        <div class="control-group">
-            <select id="selectMode" disabled>
-                <option value="start">Select Start Point</option>
-                <option value="end">Select End Point</option>
-            </select>
             <button id="startSearch" disabled>Find Path</button>
-        </div>
-        <div class="control-group">
-            <label>Search Speed:</label>
-            <input type="range" id="speedControl" min="1" max="10" value="5" disabled>
-            <span id="speedValue">Normal</span>
             <button id="pauseSearch" disabled>Pause</button>
         </div>
+        <div class="control-group">
+            <label>A* Speed:</label>
+            <input type="range" id="speedControl" min="1" max="10" value="5">
+            <span id="speedValue">Normal</span>
+        </div>
+    </div>
+
+    <div id="help-panel">
+        <h3>How to Use</h3>
+        <ol>
+            <li>Navigate to any area on the map</li>
+            <li>Choose "Set Start Point" and click near a road</li>
+            <li>Choose "Set End Point" and click near another road</li>
+            <li>Click "Find Path" to run A* pathfinding</li>
+        </ol>
+        <p class="tip">💡 Zoom in to see more road details</p>
     </div>
     
     <div id="metrics">
